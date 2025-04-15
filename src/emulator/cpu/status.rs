@@ -16,6 +16,10 @@ impl StatusReg {
         StatusReg { status: 0 }
     }
 
+    pub fn get_flag(&self, flag: u8) -> u8 {
+        self.status & flag
+    }
+
     pub fn set_flag(&mut self, flag: u8) {
         self.status |= flag;
     }
