@@ -93,3 +93,23 @@ fn test_inx_overflow() {
     cpu.run();
     assert_eq!(cpu.indx_reg_x, 1)
 }
+
+#[test]
+fn test_lda_from_memory() {
+    let mut cpu = CPU6502::new();
+    cpu.memory.mem_write(0x10, 0x55);
+
+    cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
+
+    assert_eq!(cpu.accumulator, 0x55);
+}
+
+#[test]
+fn test_sta_0x85_store_accumulatore() {
+    let mut cpu = CPU6502::new();
+    cpu.load(vec![0x85, 0x10, 0x00]);
+    cpu.reset();
+    cpu.accumulator = 123;
+    cpu.run();
+    assert_eq!(cpu.memory.mem_read(0x10), 123);
+}

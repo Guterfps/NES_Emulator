@@ -33,8 +33,8 @@ enum AddressingMode {
     AbsoluteX,
     AbsoluteY,
     Indirect,
-    IndexedIndirect,
-    IndirectIndexed,
+    IndexedIndirectX,
+    IndirectIndexedY,
 }
 
 const PC_START_ADDR: u16 = 0x8000;
@@ -43,14 +43,14 @@ const RESET_LOCATION: u16 = 0xFFFC;
 const BRK_INTR_HANDLER_ADDR: u16 = 0xFFFE;
 const ZERO_PAGE: u16 = 0x0000; // 0x0000 - 0x00FF
 const STACK_ADDR: u16 = 0x0100; // 0x0100 - 0x01FF
-const PAGE_SIZE: usize = 0xFF;
+const PAGE_SIZE: u8 = 0xFF;
 
 impl CPU6502 {
     pub fn new() -> Self {
         CPU6502 {
             status_reg: StatusReg::new(),
             program_counter: 0,
-            stack_pointer: 0,
+            stack_pointer: PAGE_SIZE,
             accumulator: 0,
             indx_reg_x: 0,
             indx_reg_y: 0,
@@ -80,6 +80,7 @@ impl CPU6502 {
         self.indx_reg_x = 0;
         self.indx_reg_y = 0;
         self.status_reg = StatusReg::new();
+        self.stack_pointer = PAGE_SIZE;
         self.program_counter = self.memory.mem_read_u16(RESET_LOCATION);
     }
 
@@ -120,6 +121,27 @@ impl CPU6502 {
         self.move_pc(mode);
     }
 
+    fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_addr(mode);
+        self.memory.mem_write(addr, self.accumulator);
+
+        self.move_pc(mode);
+    }
+
+    fn stx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_addr(mode);
+        self.memory.mem_write(addr, self.indx_reg_x);
+
+        self.move_pc(mode);
+    }
+
+    fn sty(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_addr(mode);
+        self.memory.mem_write(addr, self.indx_reg_y);
+
+        self.move_pc(mode);
+    }
+
     // transfer ops
     fn tax(&mut self, mode: &AddressingMode) {
         self.indx_reg_x = self.accumulator;
@@ -128,6 +150,83 @@ impl CPU6502 {
         Self::update_negative_flag(self.indx_reg_x, &mut self.status_reg);
 
         self.move_pc(mode);
+    }
+
+    fn tay(&mut self, mode: &AddressingMode) {
+        self.indx_reg_y = self.accumulator;
+
+        Self::update_zero_flag(self.indx_reg_y, &mut self.status_reg);
+        Self::update_negative_flag(self.indx_reg_y, &mut self.status_reg);
+
+        self.move_pc(mode);
+    }
+
+    fn txa(&mut self, mode: &AddressingMode) {
+        self.accumulator = self.indx_reg_x;
+
+        Self::update_zero_flag(self.accumulator, &mut self.status_reg);
+        Self::update_negative_flag(self.accumulator, &mut self.status_reg);
+
+        self.move_pc(mode);
+    }
+
+    fn tya(&mut self, mode: &AddressingMode) {
+        self.accumulator = self.indx_reg_y;
+
+        Self::update_zero_flag(self.accumulator, &mut self.status_reg);
+        Self::update_negative_flag(self.accumulator, &mut self.status_reg);
+
+        self.move_pc(mode);
+    }
+
+    // stack ops
+    fn tsx(&mut self, mode: &AddressingMode) {
+        self.indx_reg_x = self.stack_pointer;
+
+        Self::update_zero_flag(self.indx_reg_x, &mut self.status_reg);
+        Self::update_negative_flag(self.indx_reg_x, &mut self.status_reg);
+
+        self.move_pc(mode);
+    }
+
+    fn txs(&mut self, mode: &AddressingMode) {
+        self.stack_pointer = self.indx_reg_x;
+        self.move_pc(mode);
+    }
+
+    fn pha(&mut self, mode: &AddressingMode) {
+        self.push_stack(self.accumulator);
+        self.move_pc(mode);
+    }
+
+    fn php(&mut self, mode: &AddressingMode) {
+        self.push_stack(self.status_reg.status);
+        self.move_pc(mode);
+    }
+
+    fn pla(&mut self, mode: &AddressingMode) {
+        self.accumulator = self.pop_stack();
+
+        Self::update_zero_flag(self.accumulator, &mut self.status_reg);
+        Self::update_negative_flag(self.accumulator, &mut self.status_reg);
+        self.move_pc(mode);
+    }
+
+    fn plp(&mut self, mode: &AddressingMode) {
+        self.status_reg.status = self.pop_stack();
+        self.move_pc(mode);
+    }
+
+    fn push_stack(&mut self, val: u8) {
+        let mem_addr = STACK_ADDR + self.stack_pointer as u16;
+        self.memory.mem_write(mem_addr, val);
+        self.stack_pointer -= 1;
+    }
+
+    fn pop_stack(&mut self) -> u8 {
+        self.stack_pointer += 1;
+        let mem_addr = STACK_ADDR + self.stack_pointer as u16;
+        self.memory.mem_read(mem_addr)
     }
 
     // Increment ops
@@ -161,7 +260,7 @@ impl CPU6502 {
 
         let bytes_to_move = match mode {
             Implicit | Accumulator => 0,
-            Immediate | ZeroPage | ZeroPageX | ZeroPageY | IndexedIndirect | IndirectIndexed => 1,
+            Immediate | ZeroPage | ZeroPageX | ZeroPageY | IndexedIndirectX | IndirectIndexedY => 1,
             Relative | Absolute | AbsoluteX | AbsoluteY | Indirect => 2,
         };
 
@@ -170,18 +269,72 @@ impl CPU6502 {
 
     fn op_code_instraction(&mut self, op_code: u8) -> bool {
         let mut is_break = false;
+        let addres_mode = Self::get_opcode_address_mode(op_code);
 
         match op_code {
-            0xA9 => self.lda(&AddressingMode::Immediate),
-            0xA2 => self.ldx(&AddressingMode::Immediate),
-            0xA0 => self.ldy(&AddressingMode::Immediate),
-            0xAA => self.tax(&AddressingMode::Implicit),
-            0xE8 => self.inx(&AddressingMode::Implicit),
+            // load and store ops
+            0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => self.lda(&addres_mode),
+            0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => self.ldx(&addres_mode),
+            0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => self.ldy(&addres_mode),
+            0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => self.sta(&addres_mode),
+            0x86 | 0x96 | 0x8E => self.stx(&addres_mode),
+            0x84 | 0x94 | 0x8C => self.sty(&addres_mode),
+            // transfer ops
+            0xAA => self.tax(&addres_mode),
+            0xA8 => self.tay(&addres_mode),
+            0x8A => self.txa(&addres_mode),
+            0x98 => self.tya(&addres_mode),
+            // stack ops
+            0xBA => self.tsx(&addres_mode),
+            0x9A => self.txs(&addres_mode),
+            0x48 => self.pha(&addres_mode),
+            0x08 => self.php(&addres_mode),
+            0x68 => self.pla(&addres_mode),
+            0x28 => self.plp(&addres_mode),
+
+            0xE8 => self.inx(&addres_mode),
             0x00 => is_break = true,
             _ => todo!(),
         };
 
         is_break
+    }
+
+    fn get_opcode_address_mode(opcode: u8) -> AddressingMode {
+        match opcode {
+            0x00 | 0x18 | 0xD8 | 0xB8 | 0x58 | 0xCA | 0x88 | 0xE8 | 0xC8 | 0xEA | 0x48 | 0x08
+            | 0x68 | 0x28 | 0x40 | 0x60 | 0x38 | 0xF8 | 0x78 | 0xAA | 0xA8 | 0xBA | 0x8A | 0x9A
+            | 0x98 => AddressingMode::Implicit,
+            0x0A | 0x4A | 0x2A | 0x6A => AddressingMode::Accumulator,
+            0xA9 | 0xA2 | 0xA0 | 0x09 | 0xE9 | 0x69 | 0x29 | 0xC9 | 0xE0 | 0xC0 | 0x49 => {
+                AddressingMode::Immediate
+            }
+            0x65 | 0x25 | 0x06 | 0x24 | 0xC5 | 0xE4 | 0xC4 | 0xC6 | 0x45 | 0xE6 | 0xA5 | 0xA6
+            | 0xA4 | 0x46 | 0x05 | 0x26 | 0x66 | 0xE5 | 0x85 | 0x86 | 0x84 => {
+                AddressingMode::ZeroPage
+            }
+            0x75 | 0x35 | 0x16 | 0xD5 | 0xD6 | 0x55 | 0xF6 | 0xB5 | 0xB4 | 0x56 | 0x15 | 0x36
+            | 0x76 | 0xF5 | 0x95 | 0x94 => AddressingMode::ZeroPageX,
+            0xB6 | 0x96 => AddressingMode::ZeroPageY,
+            0x90 | 0xB0 | 0xF0 | 0x30 | 0xD0 | 0x10 | 0x50 | 0x70 => AddressingMode::Relative,
+            0x6D | 0x2D | 0x0E | 0x2C | 0xCD | 0xEC | 0xCC | 0xCE | 0x4D | 0xEE | 0x4C | 0x20
+            | 0xAD | 0xAE | 0xAC | 0x4E | 0x0D | 0x2E | 0x6E | 0xED | 0x8D | 0x8E | 0x8C => {
+                AddressingMode::Absolute
+            }
+            0x7D | 0x3D | 0x1E | 0xDD | 0xDE | 0x5D | 0xFE | 0xBD | 0xBC | 0x5E | 0x1D | 0x3E
+            | 0x7E | 0xFD | 0x9D => AddressingMode::AbsoluteX,
+            0x79 | 0x39 | 0xD9 | 0x59 | 0xB9 | 0xBE | 0x19 | 0xF9 | 0x99 => {
+                AddressingMode::AbsoluteY
+            }
+            0x6C => AddressingMode::Indirect,
+            0x61 | 0x21 | 0xC1 | 0x41 | 0xA1 | 0x01 | 0xE1 | 0x81 => {
+                AddressingMode::IndexedIndirectX
+            }
+            0x71 | 0x31 | 0xD1 | 0x51 | 0xB1 | 0x11 | 0xF1 | 0x91 => {
+                AddressingMode::IndirectIndexedY
+            }
+            _ => panic!("invalid opcode: {}", opcode),
+        }
     }
 
     fn get_operand_addr(&mut self, mode: &AddressingMode) -> u16 {
@@ -197,8 +350,8 @@ impl CPU6502 {
             AddressingMode::AbsoluteX => self.absolute_x_addr(),
             AddressingMode::AbsoluteY => self.absolute_y_addr(),
             AddressingMode::Indirect => self.relative_addr(),
-            AddressingMode::IndexedIndirect => self.indexed_indirect_addr(),
-            AddressingMode::IndirectIndexed => self.indirect_indexed_addr(),
+            AddressingMode::IndexedIndirectX => self.indexed_indirect_addr(),
+            AddressingMode::IndirectIndexedY => self.indirect_indexed_addr(),
         }
     }
 
