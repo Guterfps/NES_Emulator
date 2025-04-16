@@ -1,7 +1,7 @@
 mod memory;
 mod status;
 
-use std::ops::Sub;
+use core::panic;
 
 use memory::*;
 use status::*;
@@ -39,7 +39,7 @@ enum AddressingMode {
     IndirectIndexedY,
 }
 
-const PC_START_ADDR: u16 = 0x8000;
+const PC_START_ADDR: u16 = 0x0600;
 const NON_MASKABLE_INTER_HNDLER_ADDR: u16 = 0xFFFA;
 const RESET_LOCATION: u16 = 0xFFFC;
 const BRK_INTR_HANDLER_ADDR: u16 = 0xFFFE;
@@ -70,9 +70,17 @@ impl CPU6502 {
     }
 
     pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU6502),
+    {
         let mut break_status: bool = false;
 
         while !break_status {
+            callback(self);
             let op_code = self.memory.mem_read(self.program_counter);
             self.program_counter += 1;
 
@@ -93,6 +101,14 @@ impl CPU6502 {
         self.load(program);
         self.reset();
         self.run();
+    }
+
+    pub fn mem_write(&mut self, addr: u16, data: u8) {
+        self.memory.mem_write(addr, data);
+    }
+
+    pub fn mem_read(&mut self, addr: u16) -> u8 {
+        self.memory.mem_read(addr)
     }
 
     // load and store ops
@@ -530,11 +546,11 @@ impl CPU6502 {
         self.program_counter = addr;
     }
 
-    fn rts(&mut self, mode: &AddressingMode) {
+    fn rts(&mut self, _mode: &AddressingMode) {
         self.program_counter = self.pop_stack_u16() + 1;
     }
 
-    fn brk(&mut self, mode: &AddressingMode) {
+    fn brk(&mut self, _mode: &AddressingMode) {
         self.push_stack_u16(self.program_counter + 1);
         self.push_stack(self.status_reg.status | BREAK_COMMAND | ONE_FLAG);
         self.status_reg.set_flag(INTERRUPT_DISABLE);
@@ -542,7 +558,7 @@ impl CPU6502 {
         self.program_counter = BRK_INTR_HANDLER_ADDR;
     }
 
-    fn rti(&mut self, mode: &AddressingMode) {
+    fn rti(&mut self, _mode: &AddressingMode) {
         self.status_reg.status = self.pop_stack();
         self.status_reg.set_flag(ONE_FLAG);
         self.status_reg.unset_flag(BREAK_COMMAND);
@@ -674,6 +690,8 @@ impl CPU6502 {
         let mut is_break = false;
         let addres_mode = Self::get_opcode_address_mode(op_code);
 
+        println!("opcode: {:#04x}, address mode: {:?}", op_code, addres_mode);
+
         match op_code {
             // load and store ops
             0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => self.lda(&addres_mode),
@@ -730,7 +748,7 @@ impl CPU6502 {
             0x4C | 0x6C => self.jmp(&addres_mode),
             0x20 => self.jsr(&addres_mode),
             0x60 => self.rts(&addres_mode),
-            // 0x00 => self.brk(&addres_mode),
+            0x00 => self.brk(&addres_mode),
             0x40 => self.rti(&addres_mode),
             // flag ops
             0x18 => self.clc(&addres_mode),
@@ -743,8 +761,8 @@ impl CPU6502 {
             // other
             0xEA => self.nop(&addres_mode),
 
-            0x00 => is_break = true,
-            _ => todo!(),
+            // 0x00 => is_break = true,
+            _ => println!("unknown opcode: {}", op_code),
         };
 
         is_break
@@ -783,14 +801,14 @@ impl CPU6502 {
             0x71 | 0x31 | 0xD1 | 0x51 | 0xB1 | 0x11 | 0xF1 | 0x91 => {
                 AddressingMode::IndirectIndexedY
             }
-            _ => panic!("invalid opcode: {}", opcode),
+            _ => panic!("invalid opcode: {:#04x}", opcode),
         }
     }
 
     fn get_operand_addr(&mut self, mode: &AddressingMode) -> u16 {
         match mode {
-            AddressingMode::Implicit => todo!(),
-            AddressingMode::Accumulator => todo!(),
+            AddressingMode::Implicit => panic!("Implicit mode"),
+            AddressingMode::Accumulator => panic!("Accumulator mode"),
             AddressingMode::Immediate => self.immediate_addr(),
             AddressingMode::ZeroPage => self.zero_page_addr(),
             AddressingMode::ZeroPageX => self.zero_page_x_addr(),
@@ -827,9 +845,7 @@ impl CPU6502 {
     }
 
     fn relative_addr(&self) -> u16 {
-        let offset = self.memory.mem_read(self.program_counter);
-        let addr = self.program_counter as i16 + offset as i16;
-        addr as u16
+        self.program_counter
     }
 
     fn absolute_addr(&mut self) -> u16 {

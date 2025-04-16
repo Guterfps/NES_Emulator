@@ -113,3 +113,11 @@ fn test_sta_0x85_store_accumulatore() {
     cpu.run();
     assert_eq!(cpu.memory.mem_read(0x10), 123);
 }
+
+// #[test]
+// fn dummy_reads_test() {
+//     let mut cpu = CPU6502::new();
+//     let program = std::fs::read("roms/tests/cpu_dummy_reads.nes").unwrap();
+//     println!("program size: {}", program.len());
+//     cpu.load_and_run(program);
+// }
