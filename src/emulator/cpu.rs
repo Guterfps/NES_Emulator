@@ -39,7 +39,7 @@ enum AddressingMode {
     IndirectIndexedY,
 }
 
-const PC_START_ADDR: u16 = 0x0000;
+const PC_START_ADDR: u16 = 0x8000;
 const NON_MASKABLE_INTER_HNDLER_ADDR: u16 = 0xFFFA;
 const RESET_LOCATION: u16 = 0xFFFC;
 const BRK_INTR_HANDLER_ADDR: u16 = 0xFFFE;
@@ -51,15 +51,15 @@ const BIT_0: u8 = 0b0000_0001;
 const BIT_7: u8 = 0b1000_0000;
 
 impl CPU6502 {
-    pub fn new() -> Self {
+    pub fn new(bus: Bus) -> Self {
         CPU6502 {
             status_reg: StatusReg::new(),
-            program_counter: 0,
+            program_counter: PC_START_ADDR,
             stack_pointer: PAGE_SIZE,
             accumulator: 0,
             indx_reg_x: 0,
             indx_reg_y: 0,
-            bus: Bus::new(),
+            bus,
         }
     }
 
