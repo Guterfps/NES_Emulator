@@ -95,9 +95,9 @@ fn test_inx_overflow() {
 }
 
 #[test]
-fn test_lda_from_memory() {
+fn test_lda_from_bus() {
     let mut cpu = CPU6502::new();
-    cpu.memory.mem_write(0x10, 0x55);
+    cpu.bus.mem_write(0x10, 0x55);
 
     cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
 
@@ -111,7 +111,7 @@ fn test_sta_0x85_store_accumulatore() {
     cpu.reset();
     cpu.accumulator = 123;
     cpu.run();
-    assert_eq!(cpu.memory.mem_read(0x10), 123);
+    assert_eq!(cpu.bus.mem_read(0x10), 123);
 }
 
 // #[test]

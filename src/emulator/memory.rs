@@ -1,0 +1,38 @@
+pub struct Memory {
+    pub mem: [u8; MEMORY_SIZE],
+}
+
+const MEMORY_SIZE: usize = 0xFFFF;
+
+pub trait MemAccess {
+    fn mem_read(&self, addr: u16) -> u8;
+    fn mem_write(&mut self, addr: u16, data: u8);
+
+    fn mem_read_u16(&mut self, pos: u16) -> u16 {
+        u16::from_le_bytes([self.mem_read(pos), self.mem_read(pos + 1)])
+    }
+
+    fn mem_write_u16(&mut self, pos: u16, data: u16) {
+        let bytes = data.to_le_bytes();
+        self.mem_write(pos, bytes[0]);
+        self.mem_write(pos + 1, bytes[1]);
+    }
+}
+
+impl Memory {
+    pub fn new() -> Self {
+        Memory {
+            mem: [0; MEMORY_SIZE],
+        }
+    }
+}
+
+impl MemAccess for Memory {
+    fn mem_read(&self, addr: u16) -> u8 {
+        self.mem[addr as usize]
+    }
+
+    fn mem_write(&mut self, addr: u16, data: u8) {
+        self.mem[addr as usize] = data;
+    }
+}

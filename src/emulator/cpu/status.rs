@@ -13,7 +13,9 @@ pub const NEGATIVE_FLAG: u8 = 0b1000_0000;
 
 impl StatusReg {
     pub fn new() -> Self {
-        StatusReg { status: 0 }
+        StatusReg {
+            status: INTERRUPT_DISABLE | ONE_FLAG,
+        }
     }
 
     pub fn get_flag(&self, flag: u8) -> u8 {

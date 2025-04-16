@@ -1,9 +1,9 @@
-mod memory;
 mod status;
 
 use core::panic;
 
-use memory::*;
+use super::bus::Bus;
+use super::memory::MemAccess;
 use status::*;
 
 pub struct CPU6502 {
@@ -13,7 +13,7 @@ pub struct CPU6502 {
     accumulator: u8,
     indx_reg_x: u8,
     indx_reg_y: u8,
-    memory: Memory,
+    bus: Bus,
 }
 
 enum RegName {
@@ -39,7 +39,7 @@ enum AddressingMode {
     IndirectIndexedY,
 }
 
-const PC_START_ADDR: u16 = 0x0600;
+const PC_START_ADDR: u16 = 0x0000;
 const NON_MASKABLE_INTER_HNDLER_ADDR: u16 = 0xFFFA;
 const RESET_LOCATION: u16 = 0xFFFC;
 const BRK_INTR_HANDLER_ADDR: u16 = 0xFFFE;
@@ -59,14 +59,15 @@ impl CPU6502 {
             accumulator: 0,
             indx_reg_x: 0,
             indx_reg_y: 0,
-            memory: Memory::new(),
+            bus: Bus::new(),
         }
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        self.memory.mem[PC_START_ADDR as usize..(PC_START_ADDR as usize + program.len())]
-            .copy_from_slice(&program[..]);
-        self.memory.mem_write_u16(RESET_LOCATION, PC_START_ADDR);
+        for (i, byte) in program.iter().enumerate() {
+            self.bus.mem_write(PC_START_ADDR + i as u16, *byte);
+        }
+        self.bus.mem_write_u16(RESET_LOCATION, PC_START_ADDR);
     }
 
     pub fn run(&mut self) {
@@ -81,7 +82,7 @@ impl CPU6502 {
 
         while !break_status {
             callback(self);
-            let op_code = self.memory.mem_read(self.program_counter);
+            let op_code = self.bus.mem_read(self.program_counter);
             self.program_counter += 1;
 
             break_status = self.op_code_instraction(op_code);
@@ -94,7 +95,7 @@ impl CPU6502 {
         self.indx_reg_y = 0;
         self.status_reg = StatusReg::new();
         self.stack_pointer = PAGE_SIZE;
-        self.program_counter = self.memory.mem_read_u16(RESET_LOCATION);
+        self.program_counter = self.bus.mem_read_u16(RESET_LOCATION);
     }
 
     pub fn load_and_run(&mut self, program: Vec<u8>) {
@@ -104,11 +105,11 @@ impl CPU6502 {
     }
 
     pub fn mem_write(&mut self, addr: u16, data: u8) {
-        self.memory.mem_write(addr, data);
+        self.bus.mem_write(addr, data);
     }
 
     pub fn mem_read(&mut self, addr: u16) -> u8 {
-        self.memory.mem_read(addr)
+        self.bus.mem_read(addr)
     }
 
     // load and store ops
@@ -126,7 +127,7 @@ impl CPU6502 {
 
     fn load_reg(&mut self, reg_name: RegName, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let val = self.memory.mem_read(addr);
+        let val = self.bus.mem_read(addr);
 
         let reg = match reg_name {
             RegName::X => &mut self.indx_reg_x,
@@ -144,21 +145,21 @@ impl CPU6502 {
 
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        self.memory.mem_write(addr, self.accumulator);
+        self.bus.mem_write(addr, self.accumulator);
 
         self.move_pc(mode);
     }
 
     fn stx(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        self.memory.mem_write(addr, self.indx_reg_x);
+        self.bus.mem_write(addr, self.indx_reg_x);
 
         self.move_pc(mode);
     }
 
     fn sty(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        self.memory.mem_write(addr, self.indx_reg_y);
+        self.bus.mem_write(addr, self.indx_reg_y);
 
         self.move_pc(mode);
     }
@@ -242,20 +243,20 @@ impl CPU6502 {
 
     fn push_stack(&mut self, val: u8) {
         let mem_addr = STACK_ADDR + self.stack_pointer as u16;
-        self.memory.mem_write(mem_addr, val);
+        self.bus.mem_write(mem_addr, val);
         self.stack_pointer -= 1;
     }
 
     fn pop_stack(&mut self) -> u8 {
         self.stack_pointer += 1;
         let mem_addr = STACK_ADDR + self.stack_pointer as u16;
-        self.memory.mem_read(mem_addr)
+        self.bus.mem_read(mem_addr)
     }
 
     // logical ops
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr);
+        let byte = self.bus.mem_read(addr);
         self.accumulator &= byte;
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
@@ -265,7 +266,7 @@ impl CPU6502 {
 
     fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr);
+        let byte = self.bus.mem_read(addr);
         self.accumulator ^= byte;
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
@@ -275,7 +276,7 @@ impl CPU6502 {
 
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr);
+        let byte = self.bus.mem_read(addr);
         self.accumulator |= byte;
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
@@ -285,7 +286,7 @@ impl CPU6502 {
 
     fn bit(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr);
+        let byte = self.bus.mem_read(addr);
         let res = self.accumulator & byte;
 
         let overflow = (byte & OVERFLOW_FLAG) != 0;
@@ -300,7 +301,7 @@ impl CPU6502 {
     // Arithmetic ops
     fn adc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr);
+        let byte = self.bus.mem_read(addr);
 
         self.add_with_carry(byte);
 
@@ -309,7 +310,7 @@ impl CPU6502 {
 
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr);
+        let byte = self.bus.mem_read(addr);
 
         self.add_with_carry(!byte);
 
@@ -333,9 +334,9 @@ impl CPU6502 {
 
     fn inc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr).wrapping_add(1);
+        let byte = self.bus.mem_read(addr).wrapping_add(1);
 
-        self.memory.mem_write(addr, byte);
+        self.bus.mem_write(addr, byte);
 
         Self::update_zero_flag(byte, &mut self.status_reg);
         Self::update_negative_flag(byte, &mut self.status_reg);
@@ -345,9 +346,9 @@ impl CPU6502 {
 
     fn dec(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
-        let byte = self.memory.mem_read(addr).wrapping_sub(1);
+        let byte = self.bus.mem_read(addr).wrapping_sub(1);
 
-        self.memory.mem_write(addr, byte);
+        self.bus.mem_write(addr, byte);
 
         Self::update_zero_flag(byte, &mut self.status_reg);
         Self::update_negative_flag(byte, &mut self.status_reg);
@@ -458,7 +459,7 @@ impl CPU6502 {
 
     fn compare(&mut self, mode: &AddressingMode, compare_reg: u8) {
         let addr = self.get_operand_addr(mode);
-        let val = self.memory.mem_read(addr);
+        let val = self.bus.mem_read(addr);
         let res = compare_reg.wrapping_sub(val);
         let carry = compare_reg >= val;
 
@@ -505,7 +506,7 @@ impl CPU6502 {
     fn branch(&mut self, mode: &AddressingMode, cond: bool) {
         if cond {
             let addr = self.get_operand_addr(mode);
-            let val = self.memory.mem_read(addr) as i8;
+            let val = self.bus.mem_read(addr) as i8;
             let sum = self
                 .program_counter
                 .wrapping_add(Self::num_of_address_mode_bytes(mode))
@@ -524,11 +525,11 @@ impl CPU6502 {
         if let AddressingMode::Indirect = mode {
             // 6502 bug with page boundry
             let indirect_ref = if (addr & PAGE_SIZE as u16) == PAGE_SIZE as u16 {
-                let lo = self.memory.mem_read(addr);
-                let hi = self.memory.mem_read(addr & 0xFF00);
+                let lo = self.bus.mem_read(addr);
+                let hi = self.bus.mem_read(addr & 0xFF00);
                 u16::from_le_bytes([lo, hi])
             } else {
-                self.memory.mem_read_u16(addr)
+                self.bus.mem_read_u16(addr)
             };
 
             self.program_counter = indirect_ref;
@@ -627,7 +628,7 @@ impl CPU6502 {
             self.accumulator
         } else {
             let addr = self.get_operand_addr(mode);
-            self.memory.mem_read(addr)
+            self.bus.mem_read(addr)
         }
     }
 
@@ -636,7 +637,7 @@ impl CPU6502 {
             self.accumulator = val;
         } else {
             let addr = self.get_operand_addr(mode);
-            self.memory.mem_write(addr, val);
+            self.bus.mem_write(addr, val);
         }
     }
 
@@ -828,18 +829,18 @@ impl CPU6502 {
     }
 
     fn zero_page_addr(&self) -> u16 {
-        let addr = self.memory.mem_read(self.program_counter);
+        let addr = self.bus.mem_read(self.program_counter);
         addr as u16
     }
 
     fn zero_page_x_addr(&self) -> u16 {
-        let param = self.memory.mem_read(self.program_counter);
+        let param = self.bus.mem_read(self.program_counter);
         let addr = self.indx_reg_x.wrapping_add(param);
         addr as u16
     }
 
     fn zero_page_y_addr(&self) -> u16 {
-        let param = self.memory.mem_read(self.program_counter);
+        let param = self.bus.mem_read(self.program_counter);
         let addr = self.indx_reg_y.wrapping_add(param);
         addr as u16
     }
@@ -849,32 +850,32 @@ impl CPU6502 {
     }
 
     fn absolute_addr(&mut self) -> u16 {
-        self.memory.mem_read_u16(self.program_counter)
+        self.bus.mem_read_u16(self.program_counter)
     }
 
     fn absolute_x_addr(&mut self) -> u16 {
-        let param = self.memory.mem_read_u16(self.program_counter);
+        let param = self.bus.mem_read_u16(self.program_counter);
         let addr = self.indx_reg_x as u16 + param;
         addr
     }
 
     fn absolute_y_addr(&mut self) -> u16 {
-        let param = self.memory.mem_read_u16(self.program_counter);
+        let param = self.bus.mem_read_u16(self.program_counter);
         let addr = self.indx_reg_y as u16 + param;
         addr
     }
 
     fn indirect_addr(&mut self) -> u16 {
-        self.memory.mem_read_u16(self.program_counter)
+        self.bus.mem_read_u16(self.program_counter)
     }
 
     fn indexed_indirect_addr(&self) -> u16 {
-        let param = self.memory.mem_read(self.program_counter);
+        let param = self.bus.mem_read(self.program_counter);
         let peek1 = self
-            .memory
+            .bus
             .mem_read(self.indx_reg_x.wrapping_add(param) as u16);
         let peek2 = self
-            .memory
+            .bus
             .mem_read(self.indx_reg_x.wrapping_add(param).wrapping_add(1) as u16)
             as u16;
         let addr = peek1 as u16 + (peek2 << 8);
@@ -883,9 +884,9 @@ impl CPU6502 {
     }
 
     fn indirect_indexed_addr(&self) -> u16 {
-        let param = self.memory.mem_read(self.program_counter);
-        let peek1 = self.memory.mem_read(param as u16);
-        let peek2 = self.memory.mem_read(param.wrapping_add(1) as u16) as u16;
+        let param = self.bus.mem_read(self.program_counter);
+        let peek1 = self.bus.mem_read(param as u16);
+        let peek2 = self.bus.mem_read(param.wrapping_add(1) as u16) as u16;
         let addr = peek1 as u16 + (peek2 << 8) + self.indx_reg_y as u16;
 
         addr
