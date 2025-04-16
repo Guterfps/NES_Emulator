@@ -748,7 +748,7 @@ impl CPU6502 {
             0x4C | 0x6C => self.jmp(&addres_mode),
             0x20 => self.jsr(&addres_mode),
             0x60 => self.rts(&addres_mode),
-            0x00 => self.brk(&addres_mode),
+            // 0x00 => self.brk(&addres_mode),
             0x40 => self.rti(&addres_mode),
             // flag ops
             0x18 => self.clc(&addres_mode),
@@ -761,7 +761,7 @@ impl CPU6502 {
             // other
             0xEA => self.nop(&addres_mode),
 
-            // 0x00 => is_break = true,
+            0x00 => is_break = true,
             _ => println!("unknown opcode: {}", op_code),
         };
 
