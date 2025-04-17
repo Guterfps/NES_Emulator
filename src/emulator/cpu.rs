@@ -608,23 +608,39 @@ impl CPU6502 {
 
     fn alr(&mut self, mode: &AddressingMode) {
         self.and(mode);
-        self.lsr(&AddressingMode::Accumulator);
+        let carry = (self.accumulator & BIT_0) != 0;
+        let res = self.accumulator >> 1;
+
+        Self::update_carry_flag(carry, &mut self.status_reg);
+        Self::update_zero_flag(res, &mut self.status_reg);
+        Self::update_negative_flag(res, &mut self.status_reg);
+
+        self.accumulator = res;
     }
 
     fn arr(&mut self, mode: &AddressingMode) {
         self.and(mode);
-        self.ror(&AddressingMode::Accumulator);
+        let res = self.accumulator.rotate_right(1);
+        let carry = ((res >> 6) & BIT_0) != 0;
+        let overflow = ((res >> 6) ^ (res >> 5)) != 0;
+
+        Self::update_carry_flag(carry, &mut self.status_reg);
+        Self::update_overflow_flag(overflow, &mut self.status_reg);
+        Self::update_zero_flag(res, &mut self.status_reg);
+        Self::update_negative_flag(res, &mut self.status_reg);
+
+        self.accumulator = res;
     }
 
     fn xaa(&mut self, mode: &AddressingMode) {
-        self.txa(&AddressingMode::Implicit);
+        self.txa(mode);
         self.and(mode);
     }
 
     fn oal(&mut self, mode: &AddressingMode) {
         self.accumulator |= 0xEE;
         self.and(mode);
-        self.tax(&AddressingMode::Implicit);
+        self.tax(mode);
     }
 
     fn sax(&mut self, mode: &AddressingMode) {
@@ -635,6 +651,8 @@ impl CPU6502 {
         self.indx_reg_x = res.wrapping_sub(val);
 
         Self::update_carry_flag(carry, &mut self.status_reg);
+        Self::update_zero_flag(self.indx_reg_x, &mut self.status_reg);
+        Self::update_negative_flag(self.indx_reg_x, &mut self.status_reg);
     }
 
     fn skb(&mut self, _mode: &AddressingMode) {
