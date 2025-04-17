@@ -1,5 +1,3 @@
-use sdl3::libc::SKF_AD_VLAN_TAG_PRESENT;
-
 use crate::emulator::rom::Rom;
 
 use super::*;
@@ -68,7 +66,7 @@ fn lda_0xa9_zero_flag() {
 
 #[test]
 fn lda_0xa9_negative_flag() {
-    let rom = test_rom(&vec![0xa9, 0xff, 0x00]);
+    let rom = test_rom(&[0xa9, 0xff, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -79,7 +77,7 @@ fn lda_0xa9_negative_flag() {
 
 #[test]
 fn ldx_0xa2_immediate_load() {
-    let rom = test_rom(&vec![0xa2, 0x05, 0x00]);
+    let rom = test_rom(&[0xa2, 0x05, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -91,7 +89,7 @@ fn ldx_0xa2_immediate_load() {
 
 #[test]
 fn ldy_0xa0_immediate_load() {
-    let rom = test_rom(&vec![0xa0, 0x05, 0x00]);
+    let rom = test_rom(&[0xa0, 0x05, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -103,7 +101,7 @@ fn ldy_0xa0_immediate_load() {
 
 #[test]
 fn tax_0xaa_move_a_to_x() {
-    let rom = test_rom(&vec![0xaa, 0x00]);
+    let rom = test_rom(&[0xaa, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -116,7 +114,7 @@ fn tax_0xaa_move_a_to_x() {
 
 #[test]
 fn inx_0e8_increment_x() {
-    let rom = test_rom(&vec![0xe8, 0x00]);
+    let rom = test_rom(&[0xe8, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -128,7 +126,7 @@ fn inx_0e8_increment_x() {
 
 #[test]
 fn inx_0e8_increment_x_negative_flag() {
-    let rom = test_rom(&vec![0xe8, 0x00]);
+    let rom = test_rom(&[0xe8, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -141,7 +139,7 @@ fn inx_0e8_increment_x_negative_flag() {
 
 #[test]
 fn test_5_ops_working_together() {
-    let rom = test_rom(&vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+    let rom = test_rom(&[0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -151,7 +149,7 @@ fn test_5_ops_working_together() {
 
 #[test]
 fn test_inx_overflow() {
-    let rom = test_rom(&vec![0xe8, 0xe8, 0x00]);
+    let rom = test_rom(&[0xe8, 0xe8, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -162,7 +160,7 @@ fn test_inx_overflow() {
 
 #[test]
 fn test_lda_from_bus() {
-    let rom = test_rom(&vec![0xa5, 0x10, 0x00]);
+    let rom = test_rom(&[0xa5, 0x10, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.bus.mem_write(0x10, 0x55);
@@ -174,7 +172,7 @@ fn test_lda_from_bus() {
 
 #[test]
 fn test_sta_0x85_store_accumulatore() {
-    let rom = test_rom(&vec![0x85, 0x10, 0x00]);
+    let rom = test_rom(&[0x85, 0x10, 0x00]);
     let bus = Bus::new(rom);
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
@@ -184,66 +182,9 @@ fn test_sta_0x85_store_accumulatore() {
 }
 
 // fn trace(cpu: &CPU6502) -> String {
+//     let pc = cpu.program_counter;
+//     let opcode = cpu.bus.mem_read(pc);
 
-// }
-
-// #[test]
-// fn test_format_trace() {
-//     let mut bus = Bus::new(test_rom(&vec![]));
-//     bus.mem_write(100, 0xa2);
-//     bus.mem_write(101, 0x01);
-//     bus.mem_write(102, 0xca);
-//     bus.mem_write(103, 0x88);
-//     bus.mem_write(104, 0x00);
-
-//     let mut cpu = CPU6502::new(bus);
-//     cpu.program_counter = 0x64;
-//     cpu.accumulator = 1;
-//     cpu.indx_reg_x = 2;
-//     cpu.indx_reg_y = 3;
-//     let mut result: Vec<String> = vec![];
-//     cpu.run_with_callback(|cpu| {
-//         result.push(trace(cpu));
-//     });
-//     assert_eq!(
-//         "0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD",
-//         result[0]
-//     );
-//     assert_eq!(
-//         "0066  CA        DEX                             A:01 X:01 Y:03 P:24 SP:FD",
-//         result[1]
-//     );
-//     assert_eq!(
-//         "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD",
-//         result[2]
-//     );
-// }
-
-// #[test]
-// fn test_format_mem_access() {
-//     let mut bus = Bus::new(test_rom(&vec![]));
-//     // ORA ($33), Y
-//     bus.mem_write(100, 0x11);
-//     bus.mem_write(101, 0x33);
-
-//     //data
-//     bus.mem_write(0x33, 00);
-//     bus.mem_write(0x34, 04);
-
-//     //target cell
-//     bus.mem_write(0x400, 0xAA);
-
-//     let mut cpu = CPU6502::new(bus);
-//     cpu.program_counter = 0x64;
-//     cpu.indx_reg_y = 0;
-//     let mut result: Vec<String> = vec![];
-//     cpu.run_with_callback(|cpu| {
-//         result.push(trace(cpu));
-//     });
-//     assert_eq!(
-//         "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD",
-//         result[0]
-//     );
 // }
 
 // #[test]

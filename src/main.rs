@@ -13,6 +13,10 @@ use sdl3::pixels::PixelFormat;
 use sdl3::sys::pixels::SDL_PixelFormat;
 
 fn main() {
+    snake_game();
+}
+
+fn snake_game() {
     let sdl_context = sdl3::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem

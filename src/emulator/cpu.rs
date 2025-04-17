@@ -4,6 +4,7 @@ use core::panic;
 
 use super::bus::Bus;
 use super::memory::MemAccess;
+use sdl3::sys::gamepad::SDL_GAMEPAD_BUTTON_LEFT_PADDLE1;
 use status::*;
 
 pub struct CPU6502 {
@@ -139,106 +140,83 @@ impl CPU6502 {
 
         Self::update_zero_flag(*reg, &mut self.status_reg);
         Self::update_negative_flag(*reg, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
         self.bus.mem_write(addr, self.accumulator);
-
-        self.move_pc(mode);
     }
 
     fn stx(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
         self.bus.mem_write(addr, self.indx_reg_x);
-
-        self.move_pc(mode);
     }
 
     fn sty(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
         self.bus.mem_write(addr, self.indx_reg_y);
-
-        self.move_pc(mode);
     }
 
     // transfer ops
-    fn tax(&mut self, mode: &AddressingMode) {
+    fn tax(&mut self, _mode: &AddressingMode) {
         self.indx_reg_x = self.accumulator;
 
         Self::update_zero_flag(self.indx_reg_x, &mut self.status_reg);
         Self::update_negative_flag(self.indx_reg_x, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn tay(&mut self, mode: &AddressingMode) {
+    fn tay(&mut self, _mode: &AddressingMode) {
         self.indx_reg_y = self.accumulator;
 
         Self::update_zero_flag(self.indx_reg_y, &mut self.status_reg);
         Self::update_negative_flag(self.indx_reg_y, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn txa(&mut self, mode: &AddressingMode) {
+    fn txa(&mut self, _mode: &AddressingMode) {
         self.accumulator = self.indx_reg_x;
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
         Self::update_negative_flag(self.accumulator, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn tya(&mut self, mode: &AddressingMode) {
+    fn tya(&mut self, _mode: &AddressingMode) {
         self.accumulator = self.indx_reg_y;
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
         Self::update_negative_flag(self.accumulator, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
     // stack ops
-    fn tsx(&mut self, mode: &AddressingMode) {
+    fn tsx(&mut self, _mode: &AddressingMode) {
         self.indx_reg_x = self.stack_pointer;
 
         Self::update_zero_flag(self.indx_reg_x, &mut self.status_reg);
         Self::update_negative_flag(self.indx_reg_x, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn txs(&mut self, mode: &AddressingMode) {
+    fn txs(&mut self, _mode: &AddressingMode) {
         self.stack_pointer = self.indx_reg_x;
-        self.move_pc(mode);
     }
 
-    fn pha(&mut self, mode: &AddressingMode) {
+    fn pha(&mut self, _mode: &AddressingMode) {
         self.push_stack(self.accumulator);
-        self.move_pc(mode);
     }
 
-    fn php(&mut self, mode: &AddressingMode) {
+    fn php(&mut self, _mode: &AddressingMode) {
         self.push_stack(self.status_reg.status | BREAK_COMMAND | ONE_FLAG);
-        self.move_pc(mode);
     }
 
-    fn pla(&mut self, mode: &AddressingMode) {
+    fn pla(&mut self, _mode: &AddressingMode) {
         self.accumulator = self.pop_stack();
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
         Self::update_negative_flag(self.accumulator, &mut self.status_reg);
-        self.move_pc(mode);
     }
 
-    fn plp(&mut self, mode: &AddressingMode) {
+    fn plp(&mut self, _mode: &AddressingMode) {
         self.status_reg.status = self.pop_stack();
         self.status_reg.set_flag(ONE_FLAG);
         self.status_reg.unset_flag(BREAK_COMMAND);
-        self.move_pc(mode);
     }
 
     fn push_stack(&mut self, val: u8) {
@@ -261,7 +239,6 @@ impl CPU6502 {
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
         Self::update_negative_flag(self.accumulator, &mut self.status_reg);
-        self.move_pc(mode);
     }
 
     fn eor(&mut self, mode: &AddressingMode) {
@@ -271,7 +248,6 @@ impl CPU6502 {
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
         Self::update_negative_flag(self.accumulator, &mut self.status_reg);
-        self.move_pc(mode);
     }
 
     fn ora(&mut self, mode: &AddressingMode) {
@@ -281,7 +257,6 @@ impl CPU6502 {
 
         Self::update_zero_flag(self.accumulator, &mut self.status_reg);
         Self::update_negative_flag(self.accumulator, &mut self.status_reg);
-        self.move_pc(mode);
     }
 
     fn bit(&mut self, mode: &AddressingMode) {
@@ -294,8 +269,6 @@ impl CPU6502 {
         Self::update_zero_flag(res, &mut self.status_reg);
         Self::update_overflow_flag(overflow, &mut self.status_reg);
         Self::update_negative_flag(byte, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
     // Arithmetic ops
@@ -304,8 +277,6 @@ impl CPU6502 {
         let byte = self.bus.mem_read(addr);
 
         self.add_with_carry(byte);
-
-        self.move_pc(mode);
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
@@ -313,8 +284,6 @@ impl CPU6502 {
         let byte = self.bus.mem_read(addr);
 
         self.add_with_carry(!byte);
-
-        self.move_pc(mode);
     }
 
     fn add_with_carry(&mut self, val: u8) {
@@ -340,8 +309,6 @@ impl CPU6502 {
 
         Self::update_zero_flag(byte, &mut self.status_reg);
         Self::update_negative_flag(byte, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
     fn dec(&mut self, mode: &AddressingMode) {
@@ -352,44 +319,34 @@ impl CPU6502 {
 
         Self::update_zero_flag(byte, &mut self.status_reg);
         Self::update_negative_flag(byte, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn inx(&mut self, mode: &AddressingMode) {
+    fn inx(&mut self, _mode: &AddressingMode) {
         self.indx_reg_x = self.indx_reg_x.wrapping_add(1);
 
         Self::update_zero_flag(self.indx_reg_x, &mut self.status_reg);
         Self::update_negative_flag(self.indx_reg_x, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn dex(&mut self, mode: &AddressingMode) {
+    fn dex(&mut self, _mode: &AddressingMode) {
         self.indx_reg_x = self.indx_reg_x.wrapping_sub(1);
 
         Self::update_zero_flag(self.indx_reg_x, &mut self.status_reg);
         Self::update_negative_flag(self.indx_reg_x, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn iny(&mut self, mode: &AddressingMode) {
+    fn iny(&mut self, _mode: &AddressingMode) {
         self.indx_reg_y = self.indx_reg_y.wrapping_add(1);
 
         Self::update_zero_flag(self.indx_reg_y, &mut self.status_reg);
         Self::update_negative_flag(self.indx_reg_y, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
-    fn dey(&mut self, mode: &AddressingMode) {
+    fn dey(&mut self, _mode: &AddressingMode) {
         self.indx_reg_y = self.indx_reg_y.wrapping_sub(1);
 
         Self::update_zero_flag(self.indx_reg_y, &mut self.status_reg);
         Self::update_negative_flag(self.indx_reg_y, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
     fn asl(&mut self, mode: &AddressingMode) {
@@ -402,7 +359,6 @@ impl CPU6502 {
         Self::update_negative_flag(res, &mut self.status_reg);
 
         self.set_val_by_mode(mode, res);
-        self.move_pc(mode);
     }
 
     fn lsr(&mut self, mode: &AddressingMode) {
@@ -415,7 +371,6 @@ impl CPU6502 {
         Self::update_negative_flag(res, &mut self.status_reg);
 
         self.set_val_by_mode(mode, res);
-        self.move_pc(mode);
     }
 
     fn rol(&mut self, mode: &AddressingMode) {
@@ -428,7 +383,6 @@ impl CPU6502 {
         Self::update_negative_flag(res, &mut self.status_reg);
 
         self.set_val_by_mode(mode, res);
-        self.move_pc(mode);
     }
 
     fn ror(&mut self, mode: &AddressingMode) {
@@ -441,7 +395,6 @@ impl CPU6502 {
         Self::update_negative_flag(res, &mut self.status_reg);
 
         self.set_val_by_mode(mode, res);
-        self.move_pc(mode);
     }
 
     // compare ops
@@ -466,8 +419,6 @@ impl CPU6502 {
         Self::update_carry_flag(carry, &mut self.status_reg);
         Self::update_zero_flag(res, &mut self.status_reg);
         Self::update_negative_flag(res, &mut self.status_reg);
-
-        self.move_pc(mode);
     }
 
     // branch ops
@@ -513,8 +464,6 @@ impl CPU6502 {
                 .wrapping_add(val as u16);
 
             self.program_counter = sum;
-        } else {
-            self.move_pc(mode);
         }
     }
 
@@ -541,8 +490,7 @@ impl CPU6502 {
     fn jsr(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_addr(mode);
 
-        self.move_pc(mode);
-        self.push_stack_u16(self.program_counter - 1);
+        self.push_stack_u16(self.program_counter + Self::num_of_address_mode_bytes(mode) - 1);
 
         self.program_counter = addr;
     }
@@ -585,43 +533,175 @@ impl CPU6502 {
     }
 
     // flag ops
-    fn clc(&mut self, mode: &AddressingMode) {
+    fn clc(&mut self, _mode: &AddressingMode) {
         self.status_reg.unset_flag(CARRY_FLAG);
-        self.move_pc(mode);
     }
 
-    fn sec(&mut self, mode: &AddressingMode) {
+    fn sec(&mut self, _mode: &AddressingMode) {
         self.status_reg.set_flag(CARRY_FLAG);
-        self.move_pc(mode);
     }
 
-    fn cld(&mut self, mode: &AddressingMode) {
+    fn cld(&mut self, _mode: &AddressingMode) {
         self.status_reg.unset_flag(DECIMAL_MODE);
-        self.move_pc(mode);
     }
 
-    fn sed(&mut self, mode: &AddressingMode) {
+    fn sed(&mut self, _mode: &AddressingMode) {
         self.status_reg.set_flag(DECIMAL_MODE);
-        self.move_pc(mode);
     }
 
-    fn cli(&mut self, mode: &AddressingMode) {
+    fn cli(&mut self, _mode: &AddressingMode) {
         self.status_reg.unset_flag(INTERRUPT_DISABLE);
-        self.move_pc(mode);
     }
 
-    fn sei(&mut self, mode: &AddressingMode) {
+    fn sei(&mut self, _mode: &AddressingMode) {
         self.status_reg.set_flag(INTERRUPT_DISABLE);
-        self.move_pc(mode);
     }
 
-    fn clv(&mut self, mode: &AddressingMode) {
+    fn clv(&mut self, _mode: &AddressingMode) {
         self.status_reg.unset_flag(OVERFLOW_FLAG);
-        self.move_pc(mode);
     }
 
     // other ops
     fn nop(&mut self, _mode: &AddressingMode) {}
+
+    // unofficial opcodes
+    fn aso(&mut self, mode: &AddressingMode) {
+        self.asl(mode);
+        self.ora(mode);
+    }
+
+    fn rla(&mut self, mode: &AddressingMode) {
+        self.rol(mode);
+        self.and(mode);
+    }
+
+    fn lse(&mut self, mode: &AddressingMode) {
+        self.lsr(mode);
+        self.eor(mode);
+    }
+
+    fn rra(&mut self, mode: &AddressingMode) {
+        self.ror(mode);
+        self.adc(mode);
+    }
+
+    fn axs(&mut self, mode: &AddressingMode) {
+        let res = self.accumulator & self.indx_reg_x;
+        let addr = self.get_operand_addr(mode);
+        self.bus.mem_write(addr, res);
+    }
+
+    fn lax(&mut self, mode: &AddressingMode) {
+        self.lda(mode);
+        self.ldx(mode);
+    }
+
+    fn dcm(&mut self, mode: &AddressingMode) {
+        self.dec(mode);
+        self.cmp(mode);
+    }
+
+    fn ins(&mut self, mode: &AddressingMode) {
+        self.inc(mode);
+        self.sbc(mode);
+    }
+
+    fn alr(&mut self, mode: &AddressingMode) {
+        self.and(mode);
+        self.lsr(&AddressingMode::Accumulator);
+    }
+
+    fn arr(&mut self, mode: &AddressingMode) {
+        self.and(mode);
+        self.ror(&AddressingMode::Accumulator);
+    }
+
+    fn xaa(&mut self, mode: &AddressingMode) {
+        self.txa(&AddressingMode::Implicit);
+        self.and(mode);
+    }
+
+    fn oal(&mut self, mode: &AddressingMode) {
+        self.accumulator |= 0xEE;
+        self.and(mode);
+        self.tax(&AddressingMode::Implicit);
+    }
+
+    fn sax(&mut self, mode: &AddressingMode) {
+        let res = self.accumulator & self.indx_reg_x;
+        let addr = self.get_operand_addr(mode);
+        let val = self.bus.mem_read(addr);
+        let carry = res >= val;
+        self.indx_reg_x = res.wrapping_sub(val);
+
+        Self::update_carry_flag(carry, &mut self.status_reg);
+    }
+
+    fn skb(&mut self, _mode: &AddressingMode) {
+        self.program_counter += 1;
+    }
+
+    fn skw(&mut self, _mode: &AddressingMode) {
+        self.program_counter += 2
+    }
+
+    fn hlt(&mut self, _mode: &AddressingMode) {
+        std::process::exit(0);
+    }
+
+    fn tas(&mut self, mode: &AddressingMode) {
+        let mut res = self.accumulator & self.indx_reg_x;
+        self.stack_pointer = res;
+        let un_indxd_addr = self.bus.mem_read(self.program_counter + 1).wrapping_add(1);
+        res &= un_indxd_addr;
+
+        let addr = self.get_operand_addr(mode);
+        self.bus.mem_write(addr, res);
+    }
+
+    fn say(&mut self, mode: &AddressingMode) {
+        let un_indexd_addr = self.bus.mem_read(self.program_counter + 1).wrapping_add(1);
+        let res = un_indexd_addr & self.indx_reg_y;
+
+        let addr = self.get_operand_addr(mode);
+        self.bus.mem_write(addr, res);
+    }
+
+    fn xas(&mut self, mode: &AddressingMode) {
+        let un_indexd_addr = self.bus.mem_read(self.program_counter + 1).wrapping_add(1);
+        let res = un_indexd_addr & self.indx_reg_x;
+
+        let addr = self.get_operand_addr(mode);
+        self.bus.mem_write(addr, res);
+    }
+
+    fn axa(&mut self, mode: &AddressingMode) {
+        let un_indexd_addr = self.bus.mem_read(self.program_counter + 1).wrapping_add(1);
+        let res = un_indexd_addr & self.accumulator & self.indx_reg_x;
+
+        let addr = self.get_operand_addr(mode);
+        self.bus.mem_write(addr, res);
+    }
+
+    fn anc(&mut self, mode: &AddressingMode) {
+        self.and(mode);
+        let carry = (self.accumulator & NEGATIVE_FLAG) != 0;
+
+        Self::update_carry_flag(carry, &mut self.status_reg);
+    }
+
+    fn las(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_addr(mode);
+        let val = self.bus.mem_read(addr);
+        let res = val & self.stack_pointer;
+
+        self.indx_reg_x = res;
+        self.accumulator = res;
+        self.stack_pointer = res;
+
+        Self::update_zero_flag(self.accumulator, &mut self.status_reg);
+        Self::update_negative_flag(self.accumulator, &mut self.status_reg);
+    }
 
     fn get_val_by_mode(&mut self, mode: &AddressingMode) -> u8 {
         if let AddressingMode::Accumulator = mode {
@@ -673,8 +753,10 @@ impl CPU6502 {
         }
     }
 
-    fn move_pc(&mut self, mode: &AddressingMode) {
-        self.program_counter += Self::num_of_address_mode_bytes(mode);
+    fn move_pc(&mut self, mode: &AddressingMode, pc_before_inst: u16) {
+        if pc_before_inst == self.program_counter {
+            self.program_counter += Self::num_of_address_mode_bytes(mode);
+        }
     }
 
     fn num_of_address_mode_bytes(mode: &AddressingMode) -> u16 {
@@ -690,6 +772,7 @@ impl CPU6502 {
     fn op_code_instraction(&mut self, op_code: u8) -> bool {
         let mut is_break = false;
         let addres_mode = Self::get_opcode_address_mode(op_code);
+        let pc_before_inst = self.program_counter;
 
         println!("opcode: {:#04x}, address mode: {:?}", op_code, addres_mode);
 
@@ -761,11 +844,40 @@ impl CPU6502 {
             0x78 => self.sei(&addres_mode),
             // other
             0xEA => self.nop(&addres_mode),
+            // unofficial ops
+            0x0F | 0x1F | 0x1B | 0x07 | 0x17 | 0x03 | 0x13 => self.aso(&addres_mode),
+            0x2F | 0x3F | 0x3B | 0x27 | 0x37 | 0x23 | 0x33 => self.rla(&addres_mode),
+            0x4F | 0x5F | 0x5B | 0x47 | 0x57 | 0x43 | 0x53 => self.lse(&addres_mode),
+            0x6F | 0x7F | 0x7B | 0x67 | 0x77 | 0x63 | 0x73 => self.rra(&addres_mode),
+            0x8F | 0x87 | 0x97 | 0x83 => self.axs(&addres_mode),
+            0xAF | 0xBF | 0xA7 | 0xB7 | 0xA3 | 0xB3 => self.lax(&addres_mode),
+            0xCF | 0xDF | 0xDB | 0xC7 | 0xD7 | 0xC3 | 0xD3 => self.dcm(&addres_mode),
+            0xEF | 0xFF | 0xFB | 0xE7 | 0xF7 | 0xE3 | 0xF3 => self.ins(&addres_mode),
+            0x4B => self.alr(&addres_mode),
+            0x6B => self.arr(&addres_mode),
+            0x8B => self.xaa(&addres_mode),
+            0xAB => self.oal(&addres_mode),
+            0xCB => self.sax(&addres_mode),
+            0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => self.nop(&addres_mode),
+            0x80 | 0x82 | 0xC2 | 0xE2 | 0x04 | 0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74 | 0xD4
+            | 0xF4 | 0x89 => self.skb(&addres_mode),
+            0x0C | 0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => self.skw(&addres_mode),
+            0x02 | 0x12 | 0x22 | 0x32 | 0x42 | 0x52 | 0x62 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2 => {
+                self.hlt(&addres_mode)
+            }
+            0x9B => self.tas(&addres_mode),
+            0x9C => self.say(&addres_mode),
+            0x9E => self.xas(&addres_mode),
+            0x9F | 0x93 => self.axa(&addres_mode),
+            0x2B | 0x0B => self.anc(&addres_mode),
+            0xBB => self.las(&addres_mode),
+            0xEB => self.sbc(&AddressingMode::Immediate),
 
             0x00 => is_break = true,
-            _ => println!("unknown opcode: {}", op_code),
+            // _ => println!("unknown opcode: {}", op_code),
         };
 
+        self.move_pc(&addres_mode, pc_before_inst);
         is_break
     }
 
@@ -773,36 +885,37 @@ impl CPU6502 {
         match opcode {
             0x00 | 0x18 | 0xD8 | 0xB8 | 0x58 | 0xCA | 0x88 | 0xE8 | 0xC8 | 0xEA | 0x48 | 0x08
             | 0x68 | 0x28 | 0x40 | 0x60 | 0x38 | 0xF8 | 0x78 | 0xAA | 0xA8 | 0xBA | 0x8A | 0x9A
-            | 0x98 => AddressingMode::Implicit,
+            | 0x98 | 0x80 | 0x82 | 0xC2 | 0xE2 | 0x04 | 0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74
+            | 0xD4 | 0xF4 | 0x02 | 0x12 | 0x22 | 0x32 | 0x42 | 0x52 | 0x62 | 0x72 | 0x92 | 0xB2
+            | 0xD2 | 0xF2 | 0x0C | 0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC | 0x1A | 0x3A | 0x5A
+            | 0x7A | 0xDA | 0xFA | 0x89 => AddressingMode::Implicit,
             0x0A | 0x4A | 0x2A | 0x6A => AddressingMode::Accumulator,
-            0xA9 | 0xA2 | 0xA0 | 0x09 | 0xE9 | 0x69 | 0x29 | 0xC9 | 0xE0 | 0xC0 | 0x49 => {
-                AddressingMode::Immediate
-            }
+            0xA9 | 0xA2 | 0xA0 | 0x09 | 0xE9 | 0x69 | 0x29 | 0xC9 | 0xE0 | 0xC0 | 0x49 | 0x0B
+            | 0x2B | 0x4B | 0x6B | 0x8B | 0xAB | 0xCB | 0xEB => AddressingMode::Immediate,
             0x65 | 0x25 | 0x06 | 0x24 | 0xC5 | 0xE4 | 0xC4 | 0xC6 | 0x45 | 0xE6 | 0xA5 | 0xA6
-            | 0xA4 | 0x46 | 0x05 | 0x26 | 0x66 | 0xE5 | 0x85 | 0x86 | 0x84 => {
-                AddressingMode::ZeroPage
-            }
+            | 0xA4 | 0x46 | 0x05 | 0x26 | 0x66 | 0xE5 | 0x85 | 0x86 | 0x84 | 0x07 | 0x27 | 0x47
+            | 0x67 | 0x87 | 0xA7 | 0xC7 | 0xE7 => AddressingMode::ZeroPage,
             0x75 | 0x35 | 0x16 | 0xD5 | 0xD6 | 0x55 | 0xF6 | 0xB5 | 0xB4 | 0x56 | 0x15 | 0x36
-            | 0x76 | 0xF5 | 0x95 | 0x94 => AddressingMode::ZeroPageX,
-            0xB6 | 0x96 => AddressingMode::ZeroPageY,
+            | 0x76 | 0xF5 | 0x95 | 0x94 | 0x17 | 0x37 | 0x57 | 0x77 | 0xD7 | 0xF7 => {
+                AddressingMode::ZeroPageX
+            }
+            0xB6 | 0x96 | 0x97 | 0xB7 => AddressingMode::ZeroPageY,
             0x90 | 0xB0 | 0xF0 | 0x30 | 0xD0 | 0x10 | 0x50 | 0x70 => AddressingMode::Relative,
             0x6D | 0x2D | 0x0E | 0x2C | 0xCD | 0xEC | 0xCC | 0xCE | 0x4D | 0xEE | 0x4C | 0x20
-            | 0xAD | 0xAE | 0xAC | 0x4E | 0x0D | 0x2E | 0x6E | 0xED | 0x8D | 0x8E | 0x8C => {
-                AddressingMode::Absolute
-            }
+            | 0xAD | 0xAE | 0xAC | 0x4E | 0x0D | 0x2E | 0x6E | 0xED | 0x8D | 0x8E | 0x8C | 0x0F
+            | 0x2F | 0x4F | 0x6F | 0x8F | 0xAF | 0xCF | 0xEF => AddressingMode::Absolute,
             0x7D | 0x3D | 0x1E | 0xDD | 0xDE | 0x5D | 0xFE | 0xBD | 0xBC | 0x5E | 0x1D | 0x3E
-            | 0x7E | 0xFD | 0x9D => AddressingMode::AbsoluteX,
-            0x79 | 0x39 | 0xD9 | 0x59 | 0xB9 | 0xBE | 0x19 | 0xF9 | 0x99 => {
-                AddressingMode::AbsoluteY
+            | 0x7E | 0xFD | 0x9D | 0x1F | 0x3F | 0x5F | 0x7F | 0xDF | 0xFF | 0x9C => {
+                AddressingMode::AbsoluteX
             }
+            0x79 | 0x39 | 0xD9 | 0x59 | 0xB9 | 0xBE | 0x19 | 0xF9 | 0x99 | 0x1B | 0x3B | 0x5B
+            | 0x7B | 0xBF | 0xDB | 0xFB | 0x9F | 0x9E | 0x9B | 0xBB => AddressingMode::AbsoluteY,
             0x6C => AddressingMode::Indirect,
-            0x61 | 0x21 | 0xC1 | 0x41 | 0xA1 | 0x01 | 0xE1 | 0x81 => {
-                AddressingMode::IndexedIndirectX
-            }
-            0x71 | 0x31 | 0xD1 | 0x51 | 0xB1 | 0x11 | 0xF1 | 0x91 => {
-                AddressingMode::IndirectIndexedY
-            }
-            _ => panic!("invalid opcode: {:#04x}", opcode),
+            0x61 | 0x21 | 0xC1 | 0x41 | 0xA1 | 0x01 | 0xE1 | 0x81 | 0x03 | 0x23 | 0x43 | 0x63
+            | 0x83 | 0xA3 | 0xC3 | 0xE3 => AddressingMode::IndexedIndirectX,
+            0x71 | 0x31 | 0xD1 | 0x51 | 0xB1 | 0x11 | 0xF1 | 0x91 | 0x13 | 0x33 | 0x53 | 0x73
+            | 0xB3 | 0xD3 | 0xF3 | 0x93 => AddressingMode::IndirectIndexedY,
+            // _ => panic!("invalid opcode: {:#04x}", opcode),
         }
     }
 
