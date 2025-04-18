@@ -4,7 +4,6 @@ use core::panic;
 
 use super::bus::Bus;
 use super::memory::MemAccess;
-use sdl3::sys::gamepad::SDL_GAMEPAD_BUTTON_LEFT_PADDLE1;
 use status::*;
 
 pub struct CPU6502 {
@@ -959,18 +958,18 @@ impl CPU6502 {
         self.program_counter
     }
 
-    fn zero_page_addr(&self) -> u16 {
+    fn zero_page_addr(&mut self) -> u16 {
         let addr = self.bus.mem_read(self.program_counter);
         addr as u16
     }
 
-    fn zero_page_x_addr(&self) -> u16 {
+    fn zero_page_x_addr(&mut self) -> u16 {
         let param = self.bus.mem_read(self.program_counter);
         let addr = self.indx_reg_x.wrapping_add(param);
         addr as u16
     }
 
-    fn zero_page_y_addr(&self) -> u16 {
+    fn zero_page_y_addr(&mut self) -> u16 {
         let param = self.bus.mem_read(self.program_counter);
         let addr = self.indx_reg_y.wrapping_add(param);
         addr as u16
@@ -1000,7 +999,7 @@ impl CPU6502 {
         self.bus.mem_read_u16(self.program_counter)
     }
 
-    fn indexed_indirect_addr(&self) -> u16 {
+    fn indexed_indirect_addr(&mut self) -> u16 {
         let param = self.bus.mem_read(self.program_counter);
         let peek1 = self
             .bus
@@ -1014,7 +1013,7 @@ impl CPU6502 {
         addr
     }
 
-    fn indirect_indexed_addr(&self) -> u16 {
+    fn indirect_indexed_addr(&mut self) -> u16 {
         let param = self.bus.mem_read(self.program_counter);
         let peek1 = self.bus.mem_read(param as u16);
         let peek2 = self.bus.mem_read(param.wrapping_add(1) as u16) as u16;

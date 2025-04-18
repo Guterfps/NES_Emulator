@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Mirroring {
     Vertical,
     Horizontal,
@@ -76,6 +76,18 @@ impl Rom {
 
     pub fn chr_size(&self) -> usize {
         self.chr_rom.len()
+    }
+
+    pub fn clone_prg_rom(&self) -> Vec<u8> {
+        self.prg_rom.clone()
+    }
+
+    pub fn clone_chr_rom(&self) -> Vec<u8> {
+        self.chr_rom.clone()
+    }
+
+    pub fn get_mirroring(&self) -> Mirroring {
+        self.screen_mirroring
     }
 
     fn get_header_tag(header: &[u8]) -> &[u8] {
