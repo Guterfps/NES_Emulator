@@ -2,7 +2,7 @@ use super::{MIRRORS_ADDR, control_reg::AddressInc};
 
 pub struct AddressReg {
     value: (u8, u8),
-    hi_ptr: bool,
+    latch: bool,
 }
 
 const MIRRORS_MASK: u16 = 0b1111_1111_1111_1111;
@@ -11,7 +11,7 @@ impl AddressReg {
     pub fn new() -> Self {
         AddressReg {
             value: (0, 0),
-            hi_ptr: (true),
+            latch: (false),
         }
     }
 
@@ -24,14 +24,14 @@ impl AddressReg {
     }
 
     pub fn update(&mut self, data: u8) {
-        if self.hi_ptr {
+        if !self.latch {
             self.value.0 = data;
         } else {
             self.value.1 = data;
         }
 
         self.mirror_down_addr();
-        self.hi_ptr = !self.hi_ptr;
+        self.toggle_latch();
     }
 
     pub fn increment(&mut self, inc: AddressInc) {
@@ -52,6 +52,14 @@ impl AddressReg {
     }
 
     pub fn reset_latch(&mut self) {
-        self.hi_ptr = true;
+        self.latch = false;
+    }
+
+    pub fn toggle_latch(&mut self) {
+        self.latch = !self.latch;
+    }
+
+    pub fn get_latch(&self) -> bool {
+        self.latch
     }
 }

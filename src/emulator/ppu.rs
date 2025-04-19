@@ -1,11 +1,17 @@
 mod address_reg;
 mod control_reg;
+mod mask_reg;
+mod scroll_reg;
+mod status_reg;
 
 use core::panic;
 
 use super::rom::Mirroring;
 use address_reg::AddressReg;
 use control_reg::*;
+use mask_reg::MaskReg;
+use scroll_reg::ScrollReg;
+use status_reg::StatusReg;
 
 pub struct Ppu {
     chr_rom: Vec<u8>,
@@ -13,9 +19,13 @@ pub struct Ppu {
     vram: [u8; VRAM_SIZE],
     oam_data: [u8; OAM_DATA_SIZE],
     mirroring: Mirroring,
-    addr_reg: AddressReg,
     ctrl_reg: ControlReg,
-    data_reg: u8,
+    mask_reg: MaskReg,
+    status_reg: StatusReg,
+    oam_addr_reg: u8,
+    scroll_reg: ScrollReg,
+    addr_reg: AddressReg,
+    oam_dma_reg: u8,
     internal_data_buf: u8,
 }
 
@@ -44,23 +54,81 @@ impl Ppu {
             vram: [0; VRAM_SIZE],
             oam_data: [0; OAM_DATA_SIZE],
             palette_table: [0; PALETTE_TABLE_SIZE],
-            addr_reg: AddressReg::new(),
             ctrl_reg: ControlReg::new(),
-            data_reg: 0,
+            mask_reg: MaskReg::new(),
+            status_reg: StatusReg::new(),
+            oam_addr_reg: 0,
+            scroll_reg: ScrollReg::new(),
+            addr_reg: AddressReg::new(),
+            oam_dma_reg: 0,
             internal_data_buf: 0,
         }
-    }
-
-    pub fn write_to_ppu_addr(&mut self, value: u8) {
-        self.addr_reg.update(value);
     }
 
     pub fn write_to_ctrl(&mut self, value: u8) {
         self.ctrl_reg.update(value);
     }
 
+    pub fn write_to_mask(&mut self, value: u8) {
+        self.mask_reg.update(value);
+    }
+
+    pub fn read_status(&mut self) -> u8 {
+        self.addr_reg.reset_latch();
+        self.status_reg.get()
+    }
+
+    pub fn write_to_oam_addr(&mut self, value: u8) {
+        self.oam_addr_reg = value;
+    }
+
+    pub fn read_oam_data(&self) -> u8 {
+        self.oam_data[self.oam_addr_reg as usize]
+    }
+
+    pub fn write_to_oam_data(&mut self, value: u8) {
+        self.oam_data[self.oam_addr_reg as usize] = value;
+        self.oam_addr_reg = self.oam_addr_reg.wrapping_add(1);
+    }
+
+    pub fn write_to_scroll(&mut self, value: u8) {
+        if self.addr_reg.get_latch() {
+            self.scroll_reg.update(scroll_reg::Mode::X, value);
+        } else {
+            self.scroll_reg.update(scroll_reg::Mode::Y, value);
+        }
+
+        self.addr_reg.toggle_latch();
+    }
+
+    pub fn write_to_ppu_addr(&mut self, value: u8) {
+        self.addr_reg.update(value);
+    }
+
     pub fn write_to_data(&mut self, value: u8) {
-        self.data_reg = value;
+        let addr = self.addr_reg.get();
+
+        match addr {
+            ROM_ADDR..VRAM_ADDR => {
+                println!("attempt to write to rom space: {addr}")
+            }
+            VRAM_ADDR..VRAM_END_ADDR => {
+                self.vram[self.mirror_vram_addr(addr) as usize] = value;
+            }
+            VRAM_END_ADDR..PALETTES_ADDR => {
+                panic!("addr space 0x3000..0x3f00 not expected to be used")
+            }
+            // mirrors of 0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C
+            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
+                let mirror_addr = addr - 0x10;
+                self.palette_table[mirror_addr as usize] = value;
+            }
+            PALETTES_ADDR..MIRRORS_ADDR => {
+                self.palette_table[(addr - PALETTES_ADDR) as usize] = value;
+            }
+            _ => panic!("unexpected access to mirrored space {addr}"),
+        }
+        self.increment_vram_addr();
     }
 
     pub fn read_data(&mut self) -> u8 {
@@ -81,8 +149,19 @@ impl Ppu {
             VRAM_END_ADDR..PALETTES_ADDR => {
                 panic!("addr space 0x3000..0x3f00 not expected to be used")
             }
+            // mirrors of 0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C
+            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
+                let mirror_addr = addr - 0x10;
+                self.palette_table[mirror_addr as usize]
+            }
             PALETTES_ADDR..MIRRORS_ADDR => self.palette_table[(addr - PALETTES_ADDR) as usize],
             _ => panic!("unexpected access to mirrored space {addr}"),
+        }
+    }
+
+    pub fn write_to_oam_dma(&mut self, data: &[u8; OAM_DATA_SIZE]) {
+        for val in data {
+            self.write_to_oam_data(*val);
         }
     }
 

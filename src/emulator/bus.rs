@@ -1,3 +1,5 @@
+use core::panic;
+
 use super::memory::MemAccess;
 use super::ppu::Ppu;
 use super::rom::Rom;
@@ -60,7 +62,9 @@ impl MemAccess for Bus {
             | PPU_OAM_DMA_REG => {
                 panic!("Attempt to read from write only PPU address {:x}", addr)
             }
+            PPU_STATUS_REG => self.ppu.read_status(),
             PPU_DATA_REG => self.ppu.read_data(),
+            PPU_OAM_DATA_REG => self.ppu.read_oam_data(),
             PPU_REG_MIRROR_START..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & PPU_REG_MIRROR_ADDR_DOWN_MASK;
                 self.mem_read(mirror_down_addr)
@@ -80,6 +84,11 @@ impl MemAccess for Bus {
                 self.cpu_vram[mirror_down_addr as usize] = data;
             }
             PPU_CTRL_REG => self.ppu.write_to_ctrl(data),
+            PPU_MASK_REG => self.ppu.write_to_mask(data),
+            PPU_STATUS_REG => panic!("attempt to write to PPU status reg"),
+            PPU_OAM_ADDR_REG => self.ppu.write_to_oam_addr(data),
+            PPU_OAM_DATA_REG => self.ppu.write_to_oam_data(data),
+            PPU_SCROLL_REG => self.ppu.write_to_scroll(data),
             PPU_ADDR_REG => self.ppu.write_to_ppu_addr(data),
             PPU_DATA_REG => self.ppu.write_to_data(data),
             PPU_REG_MIRROR_START..=PPU_REGISTERS_MIRRORS_END => {
