@@ -118,13 +118,8 @@ impl Ppu {
             VRAM_END_ADDR..PALETTES_ADDR => {
                 panic!("addr space 0x3000..0x3f00 not expected to be used")
             }
-            // mirrors of 0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C
-            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
-                let mirror_addr = addr - 0x10;
-                self.palette_table[mirror_addr as usize] = value;
-            }
             PALETTES_ADDR..MIRRORS_ADDR => {
-                self.palette_table[(addr - PALETTES_ADDR) as usize] = value;
+                self.palette_table[Self::get_palette_table_index(addr)] = value;
             }
             _ => panic!("unexpected access to mirrored space {addr}"),
         }
@@ -149,14 +144,20 @@ impl Ppu {
             VRAM_END_ADDR..PALETTES_ADDR => {
                 panic!("addr space 0x3000..0x3f00 not expected to be used")
             }
-            // mirrors of 0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C
-            0x3F10 | 0x3F14 | 0x3F18 | 0x3F1C => {
-                let mirror_addr = addr - 0x10;
-                self.palette_table[mirror_addr as usize]
-            }
-            PALETTES_ADDR..MIRRORS_ADDR => self.palette_table[(addr - PALETTES_ADDR) as usize],
+            PALETTES_ADDR..MIRRORS_ADDR => self.palette_table[Self::get_palette_table_index(addr)],
             _ => panic!("unexpected access to mirrored space {addr}"),
         }
+    }
+
+    fn get_palette_table_index(addr: u16) -> usize {
+        let mut index = addr & (PALETTE_TABLE_SIZE - 1) as u16;
+
+        // mirrors of 0x3F00 | 0x3F04 | 0x3F08 | 0x3F0C
+        if let 0x10 | 0x14 | 0x18 | 0x1C = index {
+            index -= 0x10;
+        }
+
+        index as usize
     }
 
     pub fn write_to_oam_dma(&mut self, data: &[u8; OAM_DATA_SIZE]) {
