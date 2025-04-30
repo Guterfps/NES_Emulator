@@ -810,6 +810,9 @@ impl CPU6502 {
             is_break = true;
         }
 
+        self.page_crossed = false;
+        self.branch_taken = false;
+
         (opcode.instraction)(self, &opcode.addr_mode);
 
         self.bus
