@@ -8,7 +8,7 @@ pub struct OpCode {
 
 pub const NUM_OF_OPCODES: usize = 256;
 
-pub static OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
+pub const OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
     OpCode {
         instraction: CPU6502::brk,
         addr_mode: AddressingMode::Implicit,

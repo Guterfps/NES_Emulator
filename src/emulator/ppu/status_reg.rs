@@ -14,11 +14,19 @@ impl StatusReg {
 
     pub fn get(&mut self) -> u8 {
         let curr_stat = self.flags;
-        self.flags &= !VBLANK_FLAG;
+        self.reset_vblank();
         curr_stat
     }
 
     pub fn update(&mut self, value: u8) {
         self.flags = value;
+    }
+
+    pub fn set_vblank(&mut self) {
+        self.flags |= VBLANK_FLAG;
+    }
+
+    pub fn reset_vblank(&mut self) {
+        self.flags &= !VBLANK_FLAG;
     }
 }

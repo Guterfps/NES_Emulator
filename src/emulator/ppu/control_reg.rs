@@ -32,4 +32,8 @@ impl ControlReg {
     pub fn update(&mut self, data: u8) {
         self.flags = data;
     }
+
+    pub fn gen_vblank_nmi(&self) -> bool {
+        (self.flags & GENERATE_NMI_FLAG) != 0
+    }
 }

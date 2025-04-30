@@ -11,7 +11,7 @@ use address_reg::AddressReg;
 use control_reg::*;
 use mask_reg::MaskReg;
 use scroll_reg::ScrollReg;
-use status_reg::StatusReg;
+use status_reg::{StatusReg, VBLANK_FLAG};
 
 pub struct Ppu {
     chr_rom: Vec<u8>,
@@ -27,6 +27,8 @@ pub struct Ppu {
     addr_reg: AddressReg,
     oam_dma_reg: u8,
     internal_data_buf: u8,
+    scanline: u16,
+    cycles: usize,
 }
 
 const PALETTE_TABLE_SIZE: usize = 32;
@@ -46,6 +48,10 @@ const NAME_TABLE_1: u16 = 1;
 const NAME_TABLE_2: u16 = 2;
 const NAME_TABLE_3: u16 = 3;
 
+const SCANLINES_PER_FRAME: u16 = 262;
+const CYCLES_PER_SCANLINE: usize = 341;
+const VERTICAL_BLANKING_LINES: u16 = 241;
+
 impl Ppu {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
         Ppu {
@@ -62,6 +68,8 @@ impl Ppu {
             addr_reg: AddressReg::new(),
             oam_dma_reg: 0,
             internal_data_buf: 0,
+            scanline: 0,
+            cycles: 0,
         }
     }
 
@@ -164,6 +172,29 @@ impl Ppu {
         for val in data {
             self.write_to_oam_data(*val);
         }
+    }
+
+    pub fn tick(&mut self, cycles: u8) -> bool {
+        self.cycles += cycles as usize;
+        let mut res = false;
+
+        if self.cycles >= CYCLES_PER_SCANLINE {
+            self.cycles -= CYCLES_PER_SCANLINE;
+            self.scanline += 1;
+
+            if (self.scanline == VERTICAL_BLANKING_LINES) && (self.ctrl_reg.gen_vblank_nmi()) {
+                self.status_reg.set_vblank();
+                todo!("triger NMI interrupt")
+            }
+
+            if self.scanline >= SCANLINES_PER_FRAME {
+                self.scanline = 0;
+                self.status_reg.reset_vblank();
+                res = true;
+            }
+        }
+
+        res
     }
 
     fn increment_vram_addr(&mut self) {

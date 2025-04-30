@@ -15,6 +15,8 @@ pub struct CPU6502 {
     accumulator: u8,
     indx_reg_x: u8,
     indx_reg_y: u8,
+    page_crossed: bool,
+    branch_taken: bool,
     bus: Bus,
 }
 
@@ -52,6 +54,8 @@ const PAGE_SIZE: u8 = 0xFF;
 const BIT_0: u8 = 0b0000_0001;
 const BIT_7: u8 = 0b1000_0000;
 
+const HI_BYTE: u16 = 0xFF00;
+
 impl CPU6502 {
     pub fn new(bus: Bus) -> Self {
         CPU6502 {
@@ -61,6 +65,8 @@ impl CPU6502 {
             accumulator: 0,
             indx_reg_x: 0,
             indx_reg_y: 0,
+            page_crossed: false,
+            branch_taken: false,
             bus,
         }
     }
@@ -465,6 +471,7 @@ impl CPU6502 {
                 .wrapping_add(val as u16);
 
             self.program_counter = sum;
+            self.branch_taken = true;
         }
     }
 
@@ -805,6 +812,9 @@ impl CPU6502 {
 
         (opcode.instraction)(self, &opcode.addr_mode);
 
+        self.bus
+            .tick(opcode.cycles + self.page_crossed as u8 + self.branch_taken as u8);
+
         // match op_code {
         //     // load and store ops
         //     0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => self.lda(&addres_mode),
@@ -998,12 +1008,16 @@ impl CPU6502 {
     fn absolute_x_addr(&mut self) -> u16 {
         let param = self.bus.mem_read_u16(self.program_counter);
         let addr = self.indx_reg_x as u16 + param;
+
+        self.page_crossed = Self::page_cross(param, addr);
         addr
     }
 
     fn absolute_y_addr(&mut self) -> u16 {
         let param = self.bus.mem_read_u16(self.program_counter);
         let addr = self.indx_reg_y as u16 + param;
+
+        self.page_crossed = Self::page_cross(param, addr);
         addr
     }
 
@@ -1029,9 +1043,16 @@ impl CPU6502 {
         let param = self.bus.mem_read(self.program_counter);
         let peek1 = self.bus.mem_read(param as u16);
         let peek2 = self.bus.mem_read(param.wrapping_add(1) as u16) as u16;
-        let addr = peek1 as u16 + (peek2 << 8) + self.indx_reg_y as u16;
+        let tmp = peek1 as u16 + (peek2 << 8);
+        let addr = tmp + self.indx_reg_y as u16;
+
+        self.page_crossed = Self::page_cross(tmp, addr);
 
         addr
+    }
+
+    fn page_cross(arg: u16, res: u16) -> bool {
+        (arg & HI_BYTE) != (res & HI_BYTE)
     }
 }
 
