@@ -35,11 +35,11 @@ const PPU_REG_MIRROR_ADDR_DOWN_MASK: u16 = 0b0010_0000_0000_0111;
 const PPU_OAM_DMA_REG: u16 = 0x4014;
 
 impl Bus {
-    pub fn new(rom: Rom) -> Self {
+    pub fn new(mut rom: Rom) -> Self {
         Bus {
             cpu_vram: [0; VRAM_SIZE],
-            prg_rom: rom.clone_prg_rom(),
-            ppu: Ppu::new(rom.clone_chr_rom(), rom.get_mirroring()),
+            prg_rom: rom.take_prg_rom(),
+            ppu: Ppu::new(rom.take_chr_rom(), rom.get_mirroring()),
             cycles: 0,
         }
     }

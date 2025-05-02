@@ -1,3 +1,5 @@
+use std::mem;
+
 #[derive(Debug, Clone, Copy)]
 pub enum Mirroring {
     Vertical,
@@ -78,12 +80,12 @@ impl Rom {
         self.chr_rom.len()
     }
 
-    pub fn clone_prg_rom(&self) -> Vec<u8> {
-        self.prg_rom.clone()
+    pub fn take_prg_rom(&mut self) -> Vec<u8> {
+        mem::take(&mut self.prg_rom)
     }
 
-    pub fn clone_chr_rom(&self) -> Vec<u8> {
-        self.chr_rom.clone()
+    pub fn take_chr_rom(&mut self) -> Vec<u8> {
+        mem::take(&mut self.chr_rom)
     }
 
     pub fn get_mirroring(&self) -> Mirroring {
