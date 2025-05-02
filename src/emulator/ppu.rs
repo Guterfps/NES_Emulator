@@ -29,6 +29,7 @@ pub struct Ppu {
     internal_data_buf: u8,
     scanline: u16,
     cycles: usize,
+    nmi_interrupt: Option<u8>,
 }
 
 const PALETTE_TABLE_SIZE: usize = 32;
@@ -70,11 +71,16 @@ impl Ppu {
             internal_data_buf: 0,
             scanline: 0,
             cycles: 0,
+            nmi_interrupt: None,
         }
     }
 
     pub fn write_to_ctrl(&mut self, value: u8) {
+        let prev_nmi_status = self.ctrl_reg.gen_vblank_nmi();
         self.ctrl_reg.update(value);
+        if !prev_nmi_status && self.ctrl_reg.gen_vblank_nmi() && self.status_reg.is_in_vblank() {
+            self.nmi_interrupt = Some(1);
+        }
     }
 
     pub fn write_to_mask(&mut self, value: u8) {
@@ -215,5 +221,9 @@ impl Ppu {
             (Horizontal, NAME_TABLE_3) => vram_indx - (2 * NAME_TABLE_SIZE),
             _ => vram_indx,
         }
+    }
+
+    pub fn get_nmi_interrupt(&mut self) -> Option<u8> {
+        self.nmi_interrupt.take()
     }
 }

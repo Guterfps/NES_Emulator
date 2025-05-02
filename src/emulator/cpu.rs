@@ -89,7 +89,12 @@ impl CPU6502 {
         let mut break_status: bool = false;
 
         while !break_status {
+            if let Some(_nmi) = self.bus.poll_nmi_status() {
+                self.interrupt_nmi();
+            }
+
             callback(self);
+
             let op_code = self.bus.mem_read(self.program_counter);
             self.program_counter += 1;
 
@@ -118,6 +123,21 @@ impl CPU6502 {
 
     pub fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
+    }
+
+    fn interrupt_nmi(&mut self) {
+        self.push_stack_u16(self.program_counter);
+
+        let mut stack_status = self.status_reg.clone();
+        stack_status.unset_flag(BREAK_COMMAND);
+        stack_status.set_flag(ONE_FLAG);
+        self.push_stack(stack_status.status);
+
+        self.status_reg.set_flag(INTERRUPT_DISABLE);
+
+        let handler_addr = self.bus.mem_read_u16(NON_MASKABLE_INTER_HNDLER_ADDR);
+        self.program_counter = handler_addr;
+        self.bus.tick(2);
     }
 
     // load and store ops
@@ -512,7 +532,8 @@ impl CPU6502 {
         self.push_stack(self.status_reg.status | BREAK_COMMAND | ONE_FLAG);
         self.status_reg.set_flag(INTERRUPT_DISABLE);
 
-        self.program_counter = BRK_INTR_HANDLER_ADDR;
+        let handler_addr = self.bus.mem_read_u16(BRK_INTR_HANDLER_ADDR);
+        self.program_counter = handler_addr;
     }
 
     fn rti(&mut self, _mode: &AddressingMode) {
@@ -525,17 +546,17 @@ impl CPU6502 {
     fn push_stack_u16(&mut self, val: u16) {
         let bytes = val.to_le_bytes();
 
-        for byte in bytes {
-            self.push_stack(byte);
+        for byte in bytes.iter().rev() {
+            self.push_stack(*byte);
         }
     }
 
     fn pop_stack_u16(&mut self) -> u16 {
         let mut bytes = [0u8; 2];
-        bytes
-            .iter_mut()
-            .rev()
-            .for_each(|byte| *byte = self.pop_stack());
+
+        for byte in bytes.iter_mut() {
+            *byte = self.pop_stack();
+        }
 
         u16::from_le_bytes(bytes)
     }

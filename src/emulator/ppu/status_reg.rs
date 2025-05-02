@@ -29,4 +29,8 @@ impl StatusReg {
     pub fn reset_vblank(&mut self) {
         self.flags &= !VBLANK_FLAG;
     }
+
+    pub fn is_in_vblank(&self) -> bool {
+        (self.flags & VBLANK_FLAG) != 0
+    }
 }

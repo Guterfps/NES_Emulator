@@ -29,4 +29,10 @@ impl StatusReg {
     pub fn unset_flag(&mut self, flag: u8) {
         self.status &= !flag;
     }
+
+    pub fn clone(&self) -> StatusReg {
+        StatusReg {
+            status: self.status,
+        }
+    }
 }

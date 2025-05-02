@@ -49,6 +49,10 @@ impl Bus {
         self.ppu.tick(cycles * 3);
     }
 
+    pub fn poll_nmi_status(&mut self) -> Option<u8> {
+        self.ppu.get_nmi_interrupt()
+    }
+
     fn read_prg_rom(&self, addr: u16) -> u8 {
         let mut rom_addr = addr - PRG_ROM_START_ADDR;
         if self.prg_rom.len() == PRG_ROM_PAGE_SIZE as usize {
