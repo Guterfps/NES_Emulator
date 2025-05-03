@@ -1,6 +1,7 @@
 mod address_reg;
 mod control_reg;
 mod mask_reg;
+pub mod render;
 mod scroll_reg;
 mod status_reg;
 
@@ -11,7 +12,7 @@ use address_reg::AddressReg;
 use control_reg::*;
 use mask_reg::MaskReg;
 use scroll_reg::ScrollReg;
-use status_reg::{StatusReg, VBLANK_FLAG};
+use status_reg::StatusReg;
 
 pub struct Ppu {
     chr_rom: Vec<u8>,
@@ -188,13 +189,18 @@ impl Ppu {
             self.cycles -= CYCLES_PER_SCANLINE;
             self.scanline += 1;
 
-            if (self.scanline == VERTICAL_BLANKING_LINES) && (self.ctrl_reg.gen_vblank_nmi()) {
+            if self.scanline == VERTICAL_BLANKING_LINES {
                 self.status_reg.set_vblank();
-                todo!("triger NMI interrupt")
+                self.status_reg.unset_sprite_zero_hit();
+
+                if self.ctrl_reg.gen_vblank_nmi() {
+                    self.nmi_interrupt = Some(1);
+                }
             }
 
             if self.scanline >= SCANLINES_PER_FRAME {
                 self.scanline = 0;
+                self.nmi_interrupt = None;
                 self.status_reg.reset_vblank();
                 res = true;
             }
@@ -223,7 +229,11 @@ impl Ppu {
         }
     }
 
-    pub fn get_nmi_interrupt(&mut self) -> Option<u8> {
+    pub fn get_nmi_interrupt(&self) -> Option<u8> {
+        self.nmi_interrupt
+    }
+
+    pub fn take_nmi_interrupt(&mut self) -> Option<u8> {
         self.nmi_interrupt.take()
     }
 }

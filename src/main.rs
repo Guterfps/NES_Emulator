@@ -2,6 +2,9 @@ mod emulator;
 
 use emulator::bus::Bus;
 use emulator::cpu::CPU6502;
+use emulator::ppu::Ppu;
+use emulator::ppu::render;
+use emulator::ppu::render::frame::Frame;
 use emulator::rom::Rom;
 
 use rand::Rng;
@@ -13,7 +16,56 @@ use sdl3::pixels::PixelFormat;
 use sdl3::sys::pixels::SDL_PixelFormat;
 
 fn main() {
-    snake_game();
+    // snake_game();
+    static_screen();
+}
+
+fn static_screen() {
+    let sdl_context = sdl3::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+    let window = video_subsystem
+        .window("Tile View", 256 * 3, 240 * 3)
+        .position_centered()
+        .build()
+        .unwrap();
+
+    let mut canvas = window.into_canvas();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    canvas.set_scale(3.0, 3.0).unwrap();
+
+    let pixel_format = unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) };
+    let creator = canvas.texture_creator();
+    let mut texture = creator
+        .create_texture_target(pixel_format, 356, 240)
+        .unwrap();
+
+    let program = std::fs::read("roms/games/Pac-Man.nes").unwrap();
+    let rom = Rom::new(&program).unwrap();
+
+    let mut frame = Frame::new();
+
+    let bus = Bus::new(rom, move |ppu: &Ppu| {
+        render::render(ppu, &mut frame);
+        texture.update(None, &frame.data, 256 * 3).unwrap();
+
+        canvas.copy(&texture, None, None).unwrap();
+        canvas.present();
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => std::process::exit(0),
+                _ => {}
+            }
+        }
+    });
+
+    let mut cpu = CPU6502::new(bus);
+    cpu.reset();
+    cpu.run();
 }
 
 fn snake_game() {
@@ -35,7 +87,7 @@ fn snake_game() {
 
     let program = std::fs::read("roms/games/snake.nes").unwrap();
     let rom = Rom::new(&program).unwrap();
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
 
     let mut cpu = CPU6502::new(bus);
     cpu.reset();

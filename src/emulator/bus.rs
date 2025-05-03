@@ -4,11 +4,12 @@ use super::memory::MemAccess;
 use super::ppu::Ppu;
 use super::rom::Rom;
 
-pub struct Bus {
+pub struct Bus<'call> {
     cpu_vram: [u8; VRAM_SIZE],
     prg_rom: Vec<u8>,
     ppu: Ppu,
     cycles: usize,
+    gameloop_callback: Box<dyn FnMut(&Ppu) + 'call>,
 }
 
 const VRAM_SIZE: usize = 2048;
@@ -34,23 +35,34 @@ const PPU_REG_MIRROR_ADDR_DOWN_MASK: u16 = 0b0010_0000_0000_0111;
 
 const PPU_OAM_DMA_REG: u16 = 0x4014;
 
-impl Bus {
-    pub fn new(mut rom: Rom) -> Self {
+const PPU_CPU_CYCLES_RATIO: u8 = 3;
+
+impl<'a> Bus<'a> {
+    pub fn new<'call, F>(mut rom: Rom, gameloop_cb: F) -> Bus<'call>
+    where
+        F: FnMut(&Ppu) + 'call,
+    {
         Bus {
             cpu_vram: [0; VRAM_SIZE],
             prg_rom: rom.take_prg_rom(),
             ppu: Ppu::new(rom.take_chr_rom(), rom.get_mirroring()),
             cycles: 0,
+            gameloop_callback: Box::from(gameloop_cb),
         }
     }
 
     pub fn tick(&mut self, cycles: u8) {
         self.cycles += cycles as usize;
-        self.ppu.tick(cycles * 3);
+
+        let new_frame = self.ppu.tick(cycles * PPU_CPU_CYCLES_RATIO);
+
+        if new_frame {
+            (self.gameloop_callback)(&self.ppu);
+        }
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<u8> {
-        self.ppu.get_nmi_interrupt()
+        self.ppu.take_nmi_interrupt()
     }
 
     fn read_prg_rom(&self, addr: u16) -> u8 {
@@ -62,7 +74,7 @@ impl Bus {
     }
 }
 
-impl MemAccess for Bus {
+impl MemAccess for Bus<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             RAM..=RAM_MIRRORS_END => {
@@ -82,7 +94,7 @@ impl MemAccess for Bus {
             }
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => self.read_prg_rom(addr),
             _ => {
-                println!("memory not supported yet at: {}", addr);
+                println!("memory not supported yet at: {:x}", addr);
                 0
             }
         }
@@ -107,10 +119,10 @@ impl MemAccess for Bus {
                 self.mem_write(mirror_down_addr, data);
             }
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => {
-                panic!("Attempt to write to Cartridge ROM at: {}", addr);
+                panic!("Attempt to write to Cartridge ROM at: {:x}", addr);
             }
             _ => {
-                println!("memory not supported yet at: {}", addr);
+                println!("memory not supported yet at: {:x}", addr);
             }
         }
     }

@@ -10,6 +10,9 @@ pub const SPRITE_SIZE_FLAG: u8 = 0b0010_0000;
 pub const MASTER_SLAVE_FLAG: u8 = 0b0100_0000;
 pub const GENERATE_NMI_FLAG: u8 = 0b1000_0000;
 
+const BACKGROUND_PATTERN_TABLE_ADDR_0: u16 = 0x0000;
+const BACKGROUND_PATTERN_TABLE_ADDR_1: u16 = 0x1000;
+
 #[repr(u8)]
 pub enum AddressInc {
     GoingAcross = 1,
@@ -35,5 +38,13 @@ impl ControlReg {
 
     pub fn gen_vblank_nmi(&self) -> bool {
         (self.flags & GENERATE_NMI_FLAG) != 0
+    }
+
+    pub fn bknd_pattern_addr(&self) -> u16 {
+        if (self.flags & BACKGROUND_PATTERN_ADDR_FLAG) != 0 {
+            BACKGROUND_PATTERN_TABLE_ADDR_1
+        } else {
+            BACKGROUND_PATTERN_TABLE_ADDR_0
+        }
     }
 }

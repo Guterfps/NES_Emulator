@@ -8,7 +8,7 @@ use super::memory::MemAccess;
 use opcode::OPCODE_TABLE;
 use status::*;
 
-pub struct CPU6502 {
+pub struct CPU6502<'a> {
     status_reg: StatusReg,
     program_counter: u16,
     stack_pointer: u8,
@@ -17,7 +17,7 @@ pub struct CPU6502 {
     indx_reg_y: u8,
     page_crossed: bool,
     branch_taken: bool,
-    bus: Bus,
+    bus: Bus<'a>,
 }
 
 enum RegName {
@@ -56,8 +56,8 @@ const BIT_7: u8 = 0b1000_0000;
 
 const HI_BYTE: u16 = 0xFF00;
 
-impl CPU6502 {
-    pub fn new(bus: Bus) -> Self {
+impl<'a> CPU6502<'a> {
+    pub fn new(bus: Bus<'a>) -> Self {
         CPU6502 {
             status_reg: StatusReg::new(),
             program_counter: PC_START_ADDR,
@@ -490,8 +490,10 @@ impl CPU6502 {
                 .wrapping_add(Self::num_of_address_mode_bytes(mode))
                 .wrapping_add(val as u16);
 
-            self.program_counter = sum;
             self.branch_taken = true;
+            self.page_crossed = Self::page_cross(self.program_counter, sum);
+
+            self.program_counter = sum;
         }
     }
 
@@ -1031,7 +1033,7 @@ impl CPU6502 {
 
     fn absolute_x_addr(&mut self) -> u16 {
         let param = self.bus.mem_read_u16(self.program_counter);
-        let addr = self.indx_reg_x as u16 + param;
+        let addr = param.wrapping_add(self.indx_reg_x as u16);
 
         self.page_crossed = Self::page_cross(param, addr);
         addr
@@ -1039,7 +1041,7 @@ impl CPU6502 {
 
     fn absolute_y_addr(&mut self) -> u16 {
         let param = self.bus.mem_read_u16(self.program_counter);
-        let addr = self.indx_reg_y as u16 + param;
+        let addr = param.wrapping_add(self.indx_reg_y as u16);
 
         self.page_crossed = Self::page_cross(param, addr);
         addr

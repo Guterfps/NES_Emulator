@@ -30,6 +30,10 @@ impl StatusReg {
         self.flags &= !VBLANK_FLAG;
     }
 
+    pub fn unset_sprite_zero_hit(&mut self) {
+        self.flags &= !SPRITE_0_HIT_FLAG;
+    }
+
     pub fn is_in_vblank(&self) -> bool {
         (self.flags & VBLANK_FLAG) != 0
     }

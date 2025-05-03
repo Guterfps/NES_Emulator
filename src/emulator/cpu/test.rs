@@ -44,7 +44,7 @@ fn test_rom(program: &[u8]) -> Rom {
 #[test]
 fn lda_0xa9_immediate_load_data() {
     let rom = test_rom(&[0xa9, 0x05, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
@@ -56,7 +56,7 @@ fn lda_0xa9_immediate_load_data() {
 #[test]
 fn lda_0xa9_zero_flag() {
     let rom = test_rom(&[0xa9, 0x00, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
@@ -67,7 +67,7 @@ fn lda_0xa9_zero_flag() {
 #[test]
 fn lda_0xa9_negative_flag() {
     let rom = test_rom(&[0xa9, 0xff, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
@@ -78,7 +78,7 @@ fn lda_0xa9_negative_flag() {
 #[test]
 fn ldx_0xa2_immediate_load() {
     let rom = test_rom(&[0xa2, 0x05, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
@@ -90,7 +90,7 @@ fn ldx_0xa2_immediate_load() {
 #[test]
 fn ldy_0xa0_immediate_load() {
     let rom = test_rom(&[0xa0, 0x05, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
@@ -102,7 +102,7 @@ fn ldy_0xa0_immediate_load() {
 #[test]
 fn tax_0xaa_move_a_to_x() {
     let rom = test_rom(&[0xaa, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.accumulator = 10;
@@ -115,7 +115,7 @@ fn tax_0xaa_move_a_to_x() {
 #[test]
 fn inx_0e8_increment_x() {
     let rom = test_rom(&[0xe8, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
@@ -127,7 +127,7 @@ fn inx_0e8_increment_x() {
 #[test]
 fn inx_0e8_increment_x_negative_flag() {
     let rom = test_rom(&[0xe8, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.indx_reg_x = 127;
@@ -140,7 +140,7 @@ fn inx_0e8_increment_x_negative_flag() {
 #[test]
 fn test_5_ops_working_together() {
     let rom = test_rom(&[0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
@@ -150,7 +150,7 @@ fn test_5_ops_working_together() {
 #[test]
 fn test_inx_overflow() {
     let rom = test_rom(&[0xe8, 0xe8, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.indx_reg_x = 0xff;
@@ -161,7 +161,7 @@ fn test_inx_overflow() {
 #[test]
 fn test_lda_from_bus() {
     let rom = test_rom(&[0xa5, 0x10, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.bus.mem_write(0x10, 0x55);
     cpu.reset();
@@ -173,7 +173,7 @@ fn test_lda_from_bus() {
 #[test]
 fn test_sta_0x85_store_accumulatore() {
     let rom = test_rom(&[0x85, 0x10, 0x00]);
-    let bus = Bus::new(rom);
+    let bus = Bus::new(rom, |_| {});
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.accumulator = 123;
@@ -191,7 +191,7 @@ fn test_sta_0x85_store_accumulatore() {
 // fn dummy_reads_test() {
 //     let program = std::fs::read("roms/tests/cpu_dummy_reads.nes").unwrap();
 //     let rom = Rom::new(&program).unwrap();
-//     let bus = Bus::new(rom);
+//     let bus = Bus::new(rom,|_| {});
 
 //     let mut cpu = CPU6502::new(bus);
 //     println!("program size: {}", program.len());
