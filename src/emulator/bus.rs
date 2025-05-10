@@ -37,6 +37,9 @@ const PPU_OAM_DMA_REG: u16 = 0x4014;
 
 const PPU_CPU_CYCLES_RATIO: u8 = 3;
 
+const PAGE_SIZE: usize = 256;
+const BYTE_SIZE: u8 = 8;
+
 impl<'a> Bus<'a> {
     pub fn new<'call, F>(mut rom: Rom, gameloop_cb: F) -> Bus<'call>
     where
@@ -117,6 +120,16 @@ impl MemAccess for Bus<'_> {
             PPU_REG_MIRROR_START..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & PPU_REG_MIRROR_ADDR_DOWN_MASK;
                 self.mem_write(mirror_down_addr, data);
+            }
+            PPU_OAM_DMA_REG => {
+                let mut buffer: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
+                let hi = (data as u16) << BYTE_SIZE;
+
+                for (i, byte) in buffer.iter_mut().enumerate() {
+                    *byte = self.mem_read(hi + i as u16);
+                }
+
+                self.ppu.write_to_oam_dma(&buffer);
             }
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => {
                 panic!("Attempt to write to Cartridge ROM at: {:x}", addr);

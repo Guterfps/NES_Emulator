@@ -17,6 +17,7 @@ use sdl3::sys::pixels::SDL_PixelFormat;
 
 fn main() {
     // snake_game();
+    // tiles();
     static_screen();
 }
 
@@ -24,7 +25,7 @@ fn static_screen() {
     let sdl_context = sdl3::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("Tile View", 256 * 3, 240 * 3)
+        .window("Static Screen", 256 * 3, 240 * 3)
         .position_centered()
         .build()
         .unwrap();
@@ -36,7 +37,7 @@ fn static_screen() {
     let pixel_format = unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) };
     let creator = canvas.texture_creator();
     let mut texture = creator
-        .create_texture_target(pixel_format, 356, 240)
+        .create_texture_target(pixel_format, 256, 240)
         .unwrap();
 
     let program = std::fs::read("roms/games/Pac-Man.nes").unwrap();
@@ -66,6 +67,119 @@ fn static_screen() {
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
     cpu.run();
+}
+
+use emulator::ppu::render::pallete_table as palette;
+
+fn show_tile(chr_rom: &Vec<u8>, bank: usize, tile_n: usize) -> Frame {
+    assert!(bank <= 1);
+
+    let mut frame = Frame::new();
+    let bank = (bank * 0x1000) as usize;
+
+    let tile = &chr_rom[(bank + tile_n * 16)..=(bank + tile_n * 16 + 15)];
+
+    for y in 0..=7 {
+        let mut upper = tile[y];
+        let mut lower = tile[y + 8];
+
+        for x in (0..=7).rev() {
+            let value = (1 & upper) << 1 | (1 & lower);
+            upper = upper >> 1;
+            lower = lower >> 1;
+            let rgb = match value {
+                0 => palette::SYSTEM_PALLETE[0x01],
+                1 => palette::SYSTEM_PALLETE[0x23],
+                2 => palette::SYSTEM_PALLETE[0x27],
+                3 => palette::SYSTEM_PALLETE[0x30],
+                _ => panic!("can't be"),
+            };
+            frame.set_pixel(x, y, rgb)
+        }
+    }
+
+    frame
+}
+
+fn show_tile_bank(chr_rom: &Vec<u8>, bank: usize) -> Frame {
+    assert!(bank <= 1);
+
+    let mut frame = Frame::new();
+    let mut tile_y = 0;
+    let mut tile_x = 0;
+    let bank = (bank * 0x1000) as usize;
+
+    for tile_n in 0..255 {
+        if tile_n != 0 && tile_n % 20 == 0 {
+            tile_y += 10;
+            tile_x = 0;
+        }
+        let tile = &chr_rom[(bank + tile_n * 16)..=(bank + tile_n * 16 + 15)];
+
+        for y in 0..=7 {
+            let mut upper = tile[y];
+            let mut lower = tile[y + 8];
+
+            for x in (0..=7).rev() {
+                let value = (1 & upper) << 1 | (1 & lower);
+                upper = upper >> 1;
+                lower = lower >> 1;
+                let rgb = match value {
+                    0 => palette::SYSTEM_PALLETE[0x01],
+                    1 => palette::SYSTEM_PALLETE[0x23],
+                    2 => palette::SYSTEM_PALLETE[0x27],
+                    3 => palette::SYSTEM_PALLETE[0x30],
+                    _ => panic!("can't be"),
+                };
+                frame.set_pixel(tile_x + x, tile_y + y, rgb)
+            }
+        }
+
+        tile_x += 10;
+    }
+    frame
+}
+
+fn tiles() {
+    let sdl_context = sdl3::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+    let window = video_subsystem
+        .window("Tile View", 256 * 3, 240 * 3)
+        .position_centered()
+        .build()
+        .unwrap();
+
+    let mut canvas = window.into_canvas();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    canvas.set_scale(3.0, 3.0).unwrap();
+
+    let pixel_format = unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) };
+    let creator = canvas.texture_creator();
+    let mut texture = creator
+        .create_texture_target(pixel_format, 256, 240)
+        .unwrap();
+
+    let program = std::fs::read("roms/games/Pac-Man.nes").unwrap();
+    let mut rom = Rom::new(&program).unwrap();
+
+    let right_bank = show_tile_bank(&rom.take_chr_rom(), 0);
+
+    texture.update(None, &right_bank.data, 256 * 3).unwrap();
+    canvas.copy(&texture, None, None).unwrap();
+    canvas.present();
+
+    loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => std::process::exit(0),
+                _ => { /* do nothing */ }
+            }
+        }
+    }
 }
 
 fn snake_game() {

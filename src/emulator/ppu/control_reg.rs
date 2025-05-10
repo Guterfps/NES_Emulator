@@ -47,4 +47,8 @@ impl ControlReg {
             BACKGROUND_PATTERN_TABLE_ADDR_0
         }
     }
+
+    pub fn sprt_pattern_addr(&self) -> u8 {
+        self.flags & SPRITE_PATTERN_ADDR
+    }
 }
