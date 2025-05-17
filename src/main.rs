@@ -1,11 +1,16 @@
 mod emulator;
 
+use std::collections::HashMap;
+
 use emulator::bus::Bus;
 use emulator::cpu::CPU6502;
+use emulator::joypad::{self, JoyPad};
 use emulator::ppu::Ppu;
 use emulator::ppu::render;
 use emulator::ppu::render::frame::Frame;
 use emulator::rom::Rom;
+
+use emulator::cpu::trace;
 
 use rand::Rng;
 use sdl3::EventPump;
@@ -15,13 +20,89 @@ use sdl3::pixels::Color;
 use sdl3::pixels::PixelFormat;
 use sdl3::sys::pixels::SDL_PixelFormat;
 
+#[macro_use]
+extern crate lazy_static;
+
 fn main() {
     // snake_game();
     // tiles();
-    static_screen();
+    nes_test();
+    // game_test();
 }
 
-fn static_screen() {
+fn nes_test() {
+    let sdl_context = sdl3::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+    let window = video_subsystem
+        .window("Static Screen", 256 * 3, 240 * 3)
+        .position_centered()
+        .build()
+        .unwrap();
+
+    let mut canvas = window.into_canvas();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    canvas.set_scale(3.0, 3.0).unwrap();
+
+    let pixel_format = unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) };
+    let creator = canvas.texture_creator();
+    let mut texture = creator
+        .create_texture_target(pixel_format, 256, 240)
+        .unwrap();
+
+    let program = std::fs::read("roms/tests/nestest.nes").unwrap();
+    let rom = Rom::new(&program).unwrap();
+
+    let mut frame = Frame::new();
+
+    let mut key_map = HashMap::new();
+    key_map.insert(Keycode::Down, joypad::Buttons::Down);
+    key_map.insert(Keycode::Up, joypad::Buttons::Up);
+    key_map.insert(Keycode::Right, joypad::Buttons::Right);
+    key_map.insert(Keycode::Left, joypad::Buttons::Left);
+    key_map.insert(Keycode::Space, joypad::Buttons::Select);
+    key_map.insert(Keycode::Return, joypad::Buttons::Start);
+    key_map.insert(Keycode::A, joypad::Buttons::A);
+    key_map.insert(Keycode::S, joypad::Buttons::B);
+
+    let bus = Bus::new(rom, move |ppu: &Ppu, joypad: &mut JoyPad| {
+        render::render(ppu, &mut frame);
+        texture.update(None, &frame.data, 256 * 3).unwrap();
+
+        canvas.copy(&texture, None, None).unwrap();
+        canvas.present();
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => std::process::exit(0),
+
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(button) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joypad.set_button(*button);
+                    }
+                }
+                Event::KeyUp { keycode, .. } => {
+                    if let Some(button) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joypad.unset_button(*button);
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+
+    let mut cpu = CPU6502::new(bus);
+    cpu.reset();
+    // cpu.program_counter = 0xC000;
+    cpu.run_with_callback(move |cpu| {
+        // println!("{}", trace::trace(cpu));
+    });
+}
+
+fn game_test() {
     let sdl_context = sdl3::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
@@ -45,7 +126,17 @@ fn static_screen() {
 
     let mut frame = Frame::new();
 
-    let bus = Bus::new(rom, move |ppu: &Ppu| {
+    let mut key_map = HashMap::new();
+    key_map.insert(Keycode::Down, joypad::Buttons::Down);
+    key_map.insert(Keycode::Up, joypad::Buttons::Up);
+    key_map.insert(Keycode::Right, joypad::Buttons::Right);
+    key_map.insert(Keycode::Left, joypad::Buttons::Left);
+    key_map.insert(Keycode::Space, joypad::Buttons::Select);
+    key_map.insert(Keycode::Return, joypad::Buttons::Start);
+    key_map.insert(Keycode::A, joypad::Buttons::A);
+    key_map.insert(Keycode::S, joypad::Buttons::B);
+
+    let bus = Bus::new(rom, move |ppu: &Ppu, joypad: &mut JoyPad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
 
@@ -59,6 +150,17 @@ fn static_screen() {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => std::process::exit(0),
+
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(button) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joypad.set_button(*button);
+                    }
+                }
+                Event::KeyUp { keycode, .. } => {
+                    if let Some(button) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joypad.unset_button(*button);
+                    }
+                }
                 _ => {}
             }
         }
@@ -75,7 +177,7 @@ fn show_tile(chr_rom: &Vec<u8>, bank: usize, tile_n: usize) -> Frame {
     assert!(bank <= 1);
 
     let mut frame = Frame::new();
-    let bank = (bank * 0x1000) as usize;
+    let bank = bank * 0x1000;
 
     let tile = &chr_rom[(bank + tile_n * 16)..=(bank + tile_n * 16 + 15)];
 
@@ -85,8 +187,8 @@ fn show_tile(chr_rom: &Vec<u8>, bank: usize, tile_n: usize) -> Frame {
 
         for x in (0..=7).rev() {
             let value = (1 & upper) << 1 | (1 & lower);
-            upper = upper >> 1;
-            lower = lower >> 1;
+            upper >>= 1;
+            lower >>= 1;
             let rgb = match value {
                 0 => palette::SYSTEM_PALLETE[0x01],
                 1 => palette::SYSTEM_PALLETE[0x23],
@@ -201,7 +303,7 @@ fn snake_game() {
 
     let program = std::fs::read("roms/games/snake.nes").unwrap();
     let rom = Rom::new(&program).unwrap();
-    let bus = Bus::new(rom, |_| {});
+    let bus = Bus::new(rom, |_, _| {});
 
     let mut cpu = CPU6502::new(bus);
     cpu.reset();

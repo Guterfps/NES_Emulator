@@ -1,5 +1,6 @@
 use core::panic;
 
+use super::joypad::JoyPad;
 use super::memory::MemAccess;
 use super::ppu::Ppu;
 use super::rom::Rom;
@@ -8,8 +9,9 @@ pub struct Bus<'call> {
     cpu_vram: [u8; VRAM_SIZE],
     prg_rom: Vec<u8>,
     ppu: Ppu,
+    joy_pad: JoyPad,
     cycles: usize,
-    gameloop_callback: Box<dyn FnMut(&Ppu) + 'call>,
+    gameloop_callback: Box<dyn FnMut(&Ppu, &mut JoyPad) + 'call>,
 }
 
 const VRAM_SIZE: usize = 2048;
@@ -35,6 +37,8 @@ const PPU_REG_MIRROR_ADDR_DOWN_MASK: u16 = 0b0010_0000_0000_0111;
 
 const PPU_OAM_DMA_REG: u16 = 0x4014;
 
+const JOYPAD_ADDR: u16 = 0x4016;
+
 const PPU_CPU_CYCLES_RATIO: u8 = 3;
 
 const PAGE_SIZE: usize = 256;
@@ -43,12 +47,13 @@ const BYTE_SIZE: u8 = 8;
 impl<'a> Bus<'a> {
     pub fn new<'call, F>(mut rom: Rom, gameloop_cb: F) -> Bus<'call>
     where
-        F: FnMut(&Ppu) + 'call,
+        F: FnMut(&Ppu, &mut JoyPad) + 'call,
     {
         Bus {
             cpu_vram: [0; VRAM_SIZE],
             prg_rom: rom.take_prg_rom(),
             ppu: Ppu::new(rom.take_chr_rom(), rom.get_mirroring()),
+            joy_pad: JoyPad::new(),
             cycles: 0,
             gameloop_callback: Box::from(gameloop_cb),
         }
@@ -60,7 +65,7 @@ impl<'a> Bus<'a> {
         let new_frame = self.ppu.tick(cycles * PPU_CPU_CYCLES_RATIO);
 
         if new_frame {
-            (self.gameloop_callback)(&self.ppu);
+            (self.gameloop_callback)(&self.ppu, &mut self.joy_pad);
         }
     }
 
@@ -86,7 +91,8 @@ impl MemAccess for Bus<'_> {
             }
             PPU_CTRL_REG | PPU_MASK_REG | PPU_OAM_ADDR_REG | PPU_SCROLL_REG | PPU_ADDR_REG
             | PPU_OAM_DMA_REG => {
-                panic!("Attempt to read from write only PPU address {:x}", addr)
+                // panic!("Attempt to read from write only PPU address {:x}", addr)
+                0
             }
             PPU_STATUS_REG => self.ppu.read_status(),
             PPU_DATA_REG => self.ppu.read_data(),
@@ -95,6 +101,7 @@ impl MemAccess for Bus<'_> {
                 let mirror_down_addr = addr & PPU_REG_MIRROR_ADDR_DOWN_MASK;
                 self.mem_read(mirror_down_addr)
             }
+            JOYPAD_ADDR => self.joy_pad.read(),
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => self.read_prg_rom(addr),
             _ => {
                 println!("memory not supported yet at: {:x}", addr);
@@ -131,6 +138,7 @@ impl MemAccess for Bus<'_> {
 
                 self.ppu.write_to_oam_dma(&buffer);
             }
+            JOYPAD_ADDR => self.joy_pad.write(data),
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => {
                 panic!("Attempt to write to Cartridge ROM at: {:x}", addr);
             }

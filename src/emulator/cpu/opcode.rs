@@ -665,7 +665,7 @@ pub const OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
         cycles: 2,
     },
     OpCode {
-        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.sax(mode),
+        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.axs(mode),
         addr_mode: AddressingMode::IndexedIndirectX,
         cycles: 6,
     },
@@ -685,7 +685,7 @@ pub const OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
         cycles: 3,
     },
     OpCode {
-        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.sax(mode),
+        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.axs(mode),
         addr_mode: AddressingMode::ZeroPage,
         cycles: 3,
     },
@@ -725,7 +725,7 @@ pub const OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
         cycles: 4,
     },
     OpCode {
-        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.sax(mode),
+        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.axs(mode),
         addr_mode: AddressingMode::Absolute,
         cycles: 4,
     },
@@ -765,7 +765,7 @@ pub const OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
         cycles: 4,
     },
     OpCode {
-        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.sax(mode),
+        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.axs(mode),
         addr_mode: AddressingMode::ZeroPageY,
         cycles: 4,
     },
@@ -865,7 +865,7 @@ pub const OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
         cycles: 2,
     },
     OpCode {
-        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.lax(mode),
+        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.oal(mode),
         addr_mode: AddressingMode::Immediate,
         cycles: 2,
     },
@@ -1025,7 +1025,7 @@ pub const OPCODE_TABLE: [OpCode; NUM_OF_OPCODES] = [
         cycles: 2,
     },
     OpCode {
-        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.axs(mode),
+        instraction: |cpu: &mut CPU6502, mode: &AddressingMode| cpu.sax(mode),
         addr_mode: AddressingMode::Immediate,
         cycles: 2,
     },

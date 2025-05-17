@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+lazy_static = "1.4.0"
 sdl3 = { version = "0", features = [] }
 rand = "0.7.3"

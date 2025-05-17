@@ -1,5 +1,6 @@
 mod opcode;
 mod status;
+pub mod trace;
 
 use core::panic;
 
@@ -10,7 +11,7 @@ use status::*;
 
 pub struct CPU6502<'a> {
     status_reg: StatusReg,
-    program_counter: u16,
+    pub program_counter: u16,
     stack_pointer: u8,
     accumulator: u8,
     indx_reg_x: u8,
@@ -51,6 +52,8 @@ const ZERO_PAGE: u16 = 0x0000; // 0x0000 - 0x00FF
 const STACK_ADDR: u16 = 0x0100; // 0x0100 - 0x01FF
 const PAGE_SIZE: u8 = 0xFF;
 
+const STACK_POINTER_START_INDX: u8 = 0xFD;
+
 const BIT_0: u8 = 0b0000_0001;
 const BIT_7: u8 = 0b1000_0000;
 
@@ -61,7 +64,7 @@ impl<'a> CPU6502<'a> {
         CPU6502 {
             status_reg: StatusReg::new(),
             program_counter: PC_START_ADDR,
-            stack_pointer: PAGE_SIZE,
+            stack_pointer: STACK_POINTER_START_INDX,
             accumulator: 0,
             indx_reg_x: 0,
             indx_reg_y: 0,
@@ -107,7 +110,7 @@ impl<'a> CPU6502<'a> {
         self.indx_reg_x = 0;
         self.indx_reg_y = 0;
         self.status_reg = StatusReg::new();
-        self.stack_pointer = PAGE_SIZE;
+        self.stack_pointer = STACK_POINTER_START_INDX;
         self.program_counter = self.bus.mem_read_u16(RESET_LOCATION);
     }
 
@@ -249,11 +252,11 @@ impl<'a> CPU6502<'a> {
     fn push_stack(&mut self, val: u8) {
         let mem_addr = STACK_ADDR + self.stack_pointer as u16;
         self.bus.mem_write(mem_addr, val);
-        self.stack_pointer -= 1;
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
 
     fn pop_stack(&mut self) -> u8 {
-        self.stack_pointer += 1;
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
         let mem_addr = STACK_ADDR + self.stack_pointer as u16;
         self.bus.mem_read(mem_addr)
     }
@@ -403,7 +406,9 @@ impl<'a> CPU6502<'a> {
     fn rol(&mut self, mode: &AddressingMode) {
         let val = self.get_val_by_mode(mode);
         let carry = (val & BIT_7) != 0;
-        let res = val.rotate_left(1);
+        let mut res = val << 1;
+
+        res |= self.status_reg.get_flag(CARRY_FLAG);
 
         Self::update_carry_flag(carry, &mut self.status_reg);
         Self::update_zero_flag(res, &mut self.status_reg);
@@ -415,7 +420,9 @@ impl<'a> CPU6502<'a> {
     fn ror(&mut self, mode: &AddressingMode) {
         let val = self.get_val_by_mode(mode);
         let carry = (val & BIT_0) != 0;
-        let res = val.rotate_right(1);
+        let mut res = val >> 1;
+
+        res |= self.status_reg.get_flag(CARRY_FLAG) << 7;
 
         Self::update_carry_flag(carry, &mut self.status_reg);
         Self::update_zero_flag(res, &mut self.status_reg);
@@ -824,10 +831,10 @@ impl<'a> CPU6502<'a> {
         // let addres_mode = Self::get_opcode_address_mode(op_code);
         let pc_before_inst = self.program_counter;
 
-        println!(
-            "opcode: {:#04x}, address mode: {:?}",
-            op_code, opcode.addr_mode
-        );
+        // println!(
+        //     "opcode: {:#04x}, address mode: {:?}",
+        //     op_code, opcode.addr_mode
+        // );
 
         if op_code == 0x00 {
             is_break = true;
@@ -946,46 +953,8 @@ impl<'a> CPU6502<'a> {
         is_break
     }
 
-    // fn get_opcode_address_mode(opcode: u8) -> AddressingMode {
-    //     match opcode {
-    //         0x00 | 0x18 | 0xD8 | 0xB8 | 0x58 | 0xCA | 0x88 | 0xE8 | 0xC8 | 0xEA | 0x48 | 0x08
-    //         | 0x68 | 0x28 | 0x40 | 0x60 | 0x38 | 0xF8 | 0x78 | 0xAA | 0xA8 | 0xBA | 0x8A | 0x9A
-    //         | 0x98 | 0x80 | 0x82 | 0xC2 | 0xE2 | 0x04 | 0x14 | 0x34 | 0x44 | 0x54 | 0x64 | 0x74
-    //         | 0xD4 | 0xF4 | 0x02 | 0x12 | 0x22 | 0x32 | 0x42 | 0x52 | 0x62 | 0x72 | 0x92 | 0xB2
-    //         | 0xD2 | 0xF2 | 0x0C | 0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC | 0x1A | 0x3A | 0x5A
-    //         | 0x7A | 0xDA | 0xFA | 0x89 => AddressingMode::Implicit,
-    //         0x0A | 0x4A | 0x2A | 0x6A => AddressingMode::Accumulator,
-    //         0xA9 | 0xA2 | 0xA0 | 0x09 | 0xE9 | 0x69 | 0x29 | 0xC9 | 0xE0 | 0xC0 | 0x49 | 0x0B
-    //         | 0x2B | 0x4B | 0x6B | 0x8B | 0xAB | 0xCB | 0xEB => AddressingMode::Immediate,
-    //         0x65 | 0x25 | 0x06 | 0x24 | 0xC5 | 0xE4 | 0xC4 | 0xC6 | 0x45 | 0xE6 | 0xA5 | 0xA6
-    //         | 0xA4 | 0x46 | 0x05 | 0x26 | 0x66 | 0xE5 | 0x85 | 0x86 | 0x84 | 0x07 | 0x27 | 0x47
-    //         | 0x67 | 0x87 | 0xA7 | 0xC7 | 0xE7 => AddressingMode::ZeroPage,
-    //         0x75 | 0x35 | 0x16 | 0xD5 | 0xD6 | 0x55 | 0xF6 | 0xB5 | 0xB4 | 0x56 | 0x15 | 0x36
-    //         | 0x76 | 0xF5 | 0x95 | 0x94 | 0x17 | 0x37 | 0x57 | 0x77 | 0xD7 | 0xF7 => {
-    //             AddressingMode::ZeroPageX
-    //         }
-    //         0xB6 | 0x96 | 0x97 | 0xB7 => AddressingMode::ZeroPageY,
-    //         0x90 | 0xB0 | 0xF0 | 0x30 | 0xD0 | 0x10 | 0x50 | 0x70 => AddressingMode::Relative,
-    //         0x6D | 0x2D | 0x0E | 0x2C | 0xCD | 0xEC | 0xCC | 0xCE | 0x4D | 0xEE | 0x4C | 0x20
-    //         | 0xAD | 0xAE | 0xAC | 0x4E | 0x0D | 0x2E | 0x6E | 0xED | 0x8D | 0x8E | 0x8C | 0x0F
-    //         | 0x2F | 0x4F | 0x6F | 0x8F | 0xAF | 0xCF | 0xEF => AddressingMode::Absolute,
-    //         0x7D | 0x3D | 0x1E | 0xDD | 0xDE | 0x5D | 0xFE | 0xBD | 0xBC | 0x5E | 0x1D | 0x3E
-    //         | 0x7E | 0xFD | 0x9D | 0x1F | 0x3F | 0x5F | 0x7F | 0xDF | 0xFF | 0x9C => {
-    //             AddressingMode::AbsoluteX
-    //         }
-    //         0x79 | 0x39 | 0xD9 | 0x59 | 0xB9 | 0xBE | 0x19 | 0xF9 | 0x99 | 0x1B | 0x3B | 0x5B
-    //         | 0x7B | 0xBF | 0xDB | 0xFB | 0x9F | 0x9E | 0x9B | 0xBB => AddressingMode::AbsoluteY,
-    //         0x6C => AddressingMode::Indirect,
-    //         0x61 | 0x21 | 0xC1 | 0x41 | 0xA1 | 0x01 | 0xE1 | 0x81 | 0x03 | 0x23 | 0x43 | 0x63
-    //         | 0x83 | 0xA3 | 0xC3 | 0xE3 => AddressingMode::IndexedIndirectX,
-    //         0x71 | 0x31 | 0xD1 | 0x51 | 0xB1 | 0x11 | 0xF1 | 0x91 | 0x13 | 0x33 | 0x53 | 0x73
-    //         | 0xB3 | 0xD3 | 0xF3 | 0x93 => AddressingMode::IndirectIndexedY,
-    //         // _ => panic!("invalid opcode: {:#04x}", opcode),
-    //     }
-    // }
-
     fn get_operand_addr(&mut self, mode: &AddressingMode) -> u16 {
-        match mode {
+        let addr = match mode {
             AddressingMode::Implicit => panic!("Implicit mode"),
             AddressingMode::Accumulator => panic!("Accumulator mode"),
             AddressingMode::Immediate => self.immediate_addr(),
@@ -996,10 +965,13 @@ impl<'a> CPU6502<'a> {
             AddressingMode::Absolute => self.absolute_addr(),
             AddressingMode::AbsoluteX => self.absolute_x_addr(),
             AddressingMode::AbsoluteY => self.absolute_y_addr(),
-            AddressingMode::Indirect => self.relative_addr(),
+            AddressingMode::Indirect => self.indirect_addr(),
             AddressingMode::IndexedIndirectX => self.indexed_indirect_addr(),
             AddressingMode::IndirectIndexedY => self.indirect_indexed_addr(),
-        }
+        };
+
+        // println!("address: {:#04x}", addr);
+        addr
     }
 
     fn immediate_addr(&self) -> u16 {
@@ -1053,14 +1025,10 @@ impl<'a> CPU6502<'a> {
 
     fn indexed_indirect_addr(&mut self) -> u16 {
         let param = self.bus.mem_read(self.program_counter);
-        let peek1 = self
-            .bus
-            .mem_read(self.indx_reg_x.wrapping_add(param) as u16);
-        let peek2 = self
-            .bus
-            .mem_read(self.indx_reg_x.wrapping_add(param).wrapping_add(1) as u16)
-            as u16;
-        let addr = peek1 as u16 + (peek2 << 8);
+        let ptr = param.wrapping_add(self.indx_reg_x);
+        let peek1 = self.bus.mem_read(ptr as u16);
+        let peek2 = self.bus.mem_read(ptr.wrapping_add(1) as u16);
+        let addr = peek1 as u16 + ((peek2 as u16) << 8);
 
         addr
     }
@@ -1068,9 +1036,9 @@ impl<'a> CPU6502<'a> {
     fn indirect_indexed_addr(&mut self) -> u16 {
         let param = self.bus.mem_read(self.program_counter);
         let peek1 = self.bus.mem_read(param as u16);
-        let peek2 = self.bus.mem_read(param.wrapping_add(1) as u16) as u16;
-        let tmp = peek1 as u16 + (peek2 << 8);
-        let addr = tmp + self.indx_reg_y as u16;
+        let peek2 = self.bus.mem_read(param.wrapping_add(1) as u16);
+        let tmp = peek1 as u16 + ((peek2 as u16) << 8);
+        let addr = tmp.wrapping_add(self.indx_reg_y as u16);
 
         self.page_crossed = Self::page_cross(tmp, addr);
 
