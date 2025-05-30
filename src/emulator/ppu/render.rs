@@ -1,11 +1,15 @@
 pub mod frame;
 pub mod pallete_table;
+mod rect;
 
 use core::panic;
 
-use super::{PALETTE_TABLE_SIZE, Ppu};
+use crate::emulator::rom::Mirroring;
+
+use super::{NAME_TABLE_SIZE, PALETTE_TABLE_SIZE, Ppu, VRAM_ADDR};
 use frame::Frame;
 use pallete_table::SYSTEM_PALLETE;
+use rect::Rect;
 
 const TILE_SIZE: usize = 16;
 const TILE_WIDTH: usize = 8;
@@ -23,48 +27,84 @@ const SPRITE_FLIP_VER: u8 = 0b1000_0000;
 const SPRITE_PALETTE: u8 = 0b0000_0011;
 const NUM_OF_SPRITE_PALETTES: usize = 4;
 
+const ATTRIBUTE_OFFSET: usize = 0x03C0;
+const TWO_NAMETABLE_SIZE: u16 = NAME_TABLE_SIZE * 2;
+const THREE_NAMETABLE_SIZE: u16 = NAME_TABLE_SIZE * 3;
+const FIRST_TABLE_ADDR: u16 = VRAM_ADDR;
+const SECOND_TABLE_ADDR: u16 = VRAM_ADDR + NAME_TABLE_SIZE;
+const THERED_TABLE_ADDR: u16 = VRAM_ADDR + TWO_NAMETABLE_SIZE;
+const FORTH_TABLE_ADDR: u16 = VRAM_ADDR + THREE_NAMETABLE_SIZE;
+
+const DISPLAY_WIDTH: usize = 256;
+const DISPLAY_HIGHT: usize = 240;
+
 pub fn render(ppu: &Ppu, frame: &mut Frame) {
     draw_backgound(ppu, frame);
     draw_sprites(ppu, frame);
 }
 
 fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
-    let bank = ppu.ctrl_reg.bknd_pattern_addr();
+    let scroll_x = ppu.scroll_reg.scroll_x() as usize;
+    let scroll_y = ppu.scroll_reg.scroll_y() as usize;
 
-    for i in 0..0x03c0 {
-        let tile = ppu.vram[i];
-        let tile_col = i & (PALETTE_TABLE_SIZE - 1);
-        let tile_row = i / PALETTE_TABLE_SIZE;
-        let tile_indx = bank as usize + tile as usize * TILE_SIZE;
-        let tile = &ppu.chr_rom[tile_indx..(tile_indx + TILE_SIZE)];
-        let pallete = bg_pallete(ppu, tile_col, tile_row);
-
-        for y in 0..TILE_HIGHT {
-            let mut upper = tile[y];
-            let mut lower = tile[y + TILE_WIDTH];
-
-            for x in (0..TILE_WIDTH).rev() {
-                let val = ((1 & lower) << 1) | (1 & upper);
-                upper >>= 1;
-                lower >>= 1;
-
-                let rgb = match val {
-                    0 => SYSTEM_PALLETE[ppu.palette_table[0] as usize],
-                    1 => SYSTEM_PALLETE[pallete[1] as usize],
-                    2 => SYSTEM_PALLETE[pallete[2] as usize],
-                    3 => SYSTEM_PALLETE[pallete[3] as usize],
-                    _ => panic!("imposible"),
-                };
-
-                frame.set_pixel(tile_col * TILE_WIDTH + x, tile_row * TILE_HIGHT + y, rgb);
-            }
+    let (main_nametable, second_nametable) = match (&ppu.mirroring, ppu.ctrl_reg.nametable_addr()) {
+        (Mirroring::Vertical, FIRST_TABLE_ADDR)
+        | (Mirroring::Vertical, THERED_TABLE_ADDR)
+        | (Mirroring::Horizontal, FIRST_TABLE_ADDR)
+        | (Mirroring::Horizontal, SECOND_TABLE_ADDR) => (
+            &ppu.vram[0..NAME_TABLE_SIZE as usize],
+            &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+        ),
+        (Mirroring::Vertical, SECOND_TABLE_ADDR)
+        | (Mirroring::Vertical, FORTH_TABLE_ADDR)
+        | (Mirroring::Horizontal, THERED_TABLE_ADDR)
+        | (Mirroring::Horizontal, FORTH_TABLE_ADDR) => (
+            &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+            &ppu.vram[0..NAME_TABLE_SIZE as usize],
+        ),
+        (_, _) => {
+            panic!("not supported mirroring type {:?}", ppu.mirroring);
         }
+    };
+
+    render_name_table(
+        ppu,
+        frame,
+        main_nametable,
+        Rect::new(scroll_x, scroll_y, DISPLAY_WIDTH, DISPLAY_HIGHT),
+        -(scroll_x as isize),
+        -(scroll_y as isize),
+    );
+
+    if scroll_x > 0 {
+        render_name_table(
+            ppu,
+            frame,
+            second_nametable,
+            Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
+            (DISPLAY_WIDTH - scroll_x) as isize,
+            0,
+        );
+    } else if scroll_y > 0 {
+        render_name_table(
+            ppu,
+            frame,
+            second_nametable,
+            Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
+            0,
+            (DISPLAY_HIGHT - scroll_y) as isize,
+        );
     }
 }
 
-fn bg_pallete(ppu: &Ppu, tile_col: usize, tile_row: usize) -> [u8; NUM_OF_BG_PALLETES] {
+fn bg_pallete(
+    ppu: &Ppu,
+    attribute_table: &[u8],
+    tile_col: usize,
+    tile_row: usize,
+) -> [u8; NUM_OF_BG_PALLETES] {
     let attr_table_idx = (tile_row / NUM_OF_BG_PALLETES) * 8 + tile_col / NUM_OF_BG_PALLETES;
-    let attr_byte = ppu.vram[0x03c0 + attr_table_idx];
+    let attr_byte = attribute_table[attr_table_idx];
 
     let pallet_idx = match (
         (tile_col & (NUM_OF_BG_PALLETES - 1)) >> 1,
@@ -103,7 +143,7 @@ fn draw_sprites(ppu: &Ppu, frame: &mut Frame) {
         let bank = ppu.ctrl_reg.sprt_pattern_addr() as u16;
 
         let rom_idx = bank as usize + tile_idx as usize * TILE_SIZE;
-        let tile = &ppu.chr_rom[(rom_idx)..(rom_idx + TILE_SIZE)];
+        let tile = &ppu.chr_rom[rom_idx..(rom_idx + TILE_SIZE)];
 
         for y in 0..TILE_HIGHT {
             let mut upper = tile[y];
@@ -156,4 +196,59 @@ fn sprite_palette(ppu: &Ppu, pal_idx: u8) -> [u8; NUM_OF_SPRITE_PALETTES] {
         ppu.palette_table[start + 1],
         ppu.palette_table[start + 2],
     ]
+}
+
+fn render_name_table(
+    ppu: &Ppu,
+    frame: &mut Frame,
+    name_table: &[u8],
+    view_port: Rect,
+    shift_x: isize,
+    shift_y: isize,
+) {
+    let bank = ppu.ctrl_reg.bknd_pattern_addr();
+    let attribute_table = &name_table[ATTRIBUTE_OFFSET..NAME_TABLE_SIZE as usize];
+
+    for i in 0..ATTRIBUTE_OFFSET {
+        let tile_col = i & (PALETTE_TABLE_SIZE - 1);
+        let tile_row = i / PALETTE_TABLE_SIZE;
+        let tile_idx = name_table[i] as u16;
+        let tile_offset = bank as usize + tile_idx as usize * TILE_SIZE;
+        let tile = &ppu.chr_rom[tile_offset..(tile_offset + TILE_SIZE)];
+        let palette = bg_pallete(ppu, attribute_table, tile_col, tile_row);
+
+        for y in 0..TILE_HIGHT {
+            let mut upper = tile[y];
+            let mut lower = tile[y + TILE_WIDTH];
+
+            for x in (0..TILE_WIDTH).rev() {
+                let val = ((1 & lower) << 1) | (1 & upper);
+                upper >>= 1;
+                lower >>= 1;
+
+                let rgb = match val {
+                    0 => SYSTEM_PALLETE[ppu.palette_table[0] as usize],
+                    1 => SYSTEM_PALLETE[palette[1] as usize],
+                    2 => SYSTEM_PALLETE[palette[2] as usize],
+                    3 => SYSTEM_PALLETE[palette[3] as usize],
+                    _ => panic!("imposible"),
+                };
+
+                let pixel_x = tile_col * TILE_WIDTH + x;
+                let pixel_y = tile_row * TILE_HIGHT + y;
+
+                if (pixel_x >= view_port.x1)
+                    && (pixel_x < view_port.x2)
+                    && (pixel_y >= view_port.y1)
+                    && (pixel_y < view_port.y2)
+                {
+                    frame.set_pixel(
+                        (pixel_x as isize + shift_x) as usize,
+                        (pixel_y as isize + shift_y) as usize,
+                        rgb,
+                    );
+                }
+            }
+        }
+    }
 }

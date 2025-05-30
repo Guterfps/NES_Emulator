@@ -23,4 +23,8 @@ impl MaskReg {
     pub fn update(&mut self, value: u8) {
         self.flags = value;
     }
+
+    pub fn show_sprites(&self) -> bool {
+        (self.flags & SHOW_SPRITES_FLAG) != 0
+    }
 }

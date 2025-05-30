@@ -19,4 +19,12 @@ impl ScrollReg {
             Mode::Y => self.y = value,
         }
     }
+
+    pub fn scroll_x(&self) -> u8 {
+        self.x
+    }
+
+    pub fn scroll_y(&self) -> u8 {
+        self.y
+    }
 }

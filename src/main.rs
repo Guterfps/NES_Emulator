@@ -26,27 +26,27 @@ extern crate lazy_static;
 fn main() {
     // snake_game();
     // tiles();
-    nes_test();
-    // game_test();
+    // nes_test();
+    game_test();
 }
 
 fn nes_test() {
     let sdl_context = sdl3::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("Static Screen", 256 * 3, 240 * 3)
+        .window("Static Screen", 256 * 4, 240 * 2)
         .position_centered()
         .build()
         .unwrap();
 
     let mut canvas = window.into_canvas();
     let mut event_pump = sdl_context.event_pump().unwrap();
-    canvas.set_scale(3.0, 3.0).unwrap();
+    canvas.set_scale(2.0, 2.0).unwrap();
 
     let pixel_format = unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) };
     let creator = canvas.texture_creator();
     let mut texture = creator
-        .create_texture_target(pixel_format, 256, 240)
+        .create_texture_target(pixel_format, 256 * 2, 240)
         .unwrap();
 
     let program = std::fs::read("roms/tests/nestest.nes").unwrap();
@@ -66,7 +66,7 @@ fn nes_test() {
 
     let bus = Bus::new(rom, move |ppu: &Ppu, joypad: &mut JoyPad| {
         render::render(ppu, &mut frame);
-        texture.update(None, &frame.data, 256 * 3).unwrap();
+        texture.update(None, &frame.data, 256 * 2 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
         canvas.present();
@@ -106,19 +106,19 @@ fn game_test() {
     let sdl_context = sdl3::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("Static Screen", 256 * 3, 240 * 3)
+        .window("Static Screen", 256 * 4, 240 * 2)
         .position_centered()
         .build()
         .unwrap();
 
     let mut canvas = window.into_canvas();
     let mut event_pump = sdl_context.event_pump().unwrap();
-    canvas.set_scale(3.0, 3.0).unwrap();
+    canvas.set_scale(2.0, 2.0).unwrap();
 
     let pixel_format = unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) };
     let creator = canvas.texture_creator();
     let mut texture = creator
-        .create_texture_target(pixel_format, 256, 240)
+        .create_texture_target(pixel_format, 256 * 2, 240)
         .unwrap();
 
     let program = std::fs::read("roms/games/Pac-Man.nes").unwrap();
@@ -138,7 +138,7 @@ fn game_test() {
 
     let bus = Bus::new(rom, move |ppu: &Ppu, joypad: &mut JoyPad| {
         render::render(ppu, &mut frame);
-        texture.update(None, &frame.data, 256 * 3).unwrap();
+        texture.update(None, &frame.data, 256 * 2 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
         canvas.present();

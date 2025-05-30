@@ -3,7 +3,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    const WIDTH: usize = 256;
+    const WIDTH: usize = 256 * 2;
     const HIGHT: usize = 240;
     const NUM_OF_PIXELS: usize = Frame::WIDTH * Frame::HIGHT;
     const PIXEL_SIZE: usize = 3;

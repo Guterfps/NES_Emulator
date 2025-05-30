@@ -186,6 +186,10 @@ impl Ppu {
         let mut res = false;
 
         if self.cycles >= CYCLES_PER_SCANLINE {
+            if self.is_sprite_0_hit(self.cycles) {
+                self.status_reg.set_sprite_zero_hit();
+            }
+
             self.cycles -= CYCLES_PER_SCANLINE;
             self.scanline += 1;
 
@@ -201,12 +205,20 @@ impl Ppu {
             if self.scanline >= SCANLINES_PER_FRAME {
                 self.scanline = 0;
                 self.nmi_interrupt = None;
+                self.status_reg.unset_sprite_zero_hit();
                 self.status_reg.reset_vblank();
                 res = true;
             }
         }
 
         res
+    }
+
+    fn is_sprite_0_hit(&self, cycle: usize) -> bool {
+        let y = self.oam_data[0] as usize;
+        let x = self.oam_data[3] as usize;
+
+        (y == self.scanline as usize) && (x <= cycle) && (self.mask_reg.show_sprites())
     }
 
     fn increment_vram_addr(&mut self) {

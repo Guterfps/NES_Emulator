@@ -13,6 +13,9 @@ pub const GENERATE_NMI_FLAG: u8 = 0b1000_0000;
 const BACKGROUND_PATTERN_TABLE_ADDR_0: u16 = 0x0000;
 const BACKGROUND_PATTERN_TABLE_ADDR_1: u16 = 0x1000;
 
+const NAME_TABLE_SIZE: u16 = 0x400;
+const NAME_TABLES_ADRESS: u16 = 0x2000;
+
 #[repr(u8)]
 pub enum AddressInc {
     GoingAcross = 1,
@@ -50,5 +53,11 @@ impl ControlReg {
 
     pub fn sprt_pattern_addr(&self) -> u8 {
         self.flags & SPRITE_PATTERN_ADDR
+    }
+
+    pub fn nametable_addr(&self) -> u16 {
+        let nametable_offset = self.flags & NAME_TABLE_FLAGS;
+
+        NAME_TABLES_ADRESS + nametable_offset as u16 * NAME_TABLE_SIZE
     }
 }
