@@ -24,7 +24,8 @@ const SPRITE_X_POS_BYTE: usize = 3;
 
 const SPRITE_FLIP_HOR: u8 = 0b0100_0000;
 const SPRITE_FLIP_VER: u8 = 0b1000_0000;
-const SPRITE_PALETTE: u8 = 0b0000_0011;
+const SPRITE_PALETTE_MASK: u8 = 0b11;
+const START_SPRITE_PALETTE_OFFSET: u8 = 0x11;
 const NUM_OF_SPRITE_PALETTES: usize = 4;
 
 const ATTRIBUTE_OFFSET: usize = 0x03C0;
@@ -32,7 +33,7 @@ const TWO_NAMETABLE_SIZE: u16 = NAME_TABLE_SIZE * 2;
 const THREE_NAMETABLE_SIZE: u16 = NAME_TABLE_SIZE * 3;
 const FIRST_TABLE_ADDR: u16 = VRAM_ADDR;
 const SECOND_TABLE_ADDR: u16 = VRAM_ADDR + NAME_TABLE_SIZE;
-const THERED_TABLE_ADDR: u16 = VRAM_ADDR + TWO_NAMETABLE_SIZE;
+const THIRD_TABLE_ADDR: u16 = VRAM_ADDR + TWO_NAMETABLE_SIZE;
 const FORTH_TABLE_ADDR: u16 = VRAM_ADDR + THREE_NAMETABLE_SIZE;
 
 const DISPLAY_WIDTH: usize = 256;
@@ -46,10 +47,13 @@ pub fn render(ppu: &Ppu, frame: &mut Frame) {
 fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
     let scroll_x = ppu.scroll_reg.scroll_x() as usize;
     let scroll_y = ppu.scroll_reg.scroll_y() as usize;
+    let base_nametable = ppu.ctrl_reg.nametable_addr();
+
+    let (main_nt, right_nt, bottom_nt, bottom_right_nt) = get_nametables(ppu, base_nametable);
 
     let (main_nametable, second_nametable) = match (&ppu.mirroring, ppu.ctrl_reg.nametable_addr()) {
         (Mirroring::Vertical, FIRST_TABLE_ADDR)
-        | (Mirroring::Vertical, THERED_TABLE_ADDR)
+        | (Mirroring::Vertical, THIRD_TABLE_ADDR)
         | (Mirroring::Horizontal, FIRST_TABLE_ADDR)
         | (Mirroring::Horizontal, SECOND_TABLE_ADDR) => (
             &ppu.vram[0..NAME_TABLE_SIZE as usize],
@@ -57,7 +61,7 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
         ),
         (Mirroring::Vertical, SECOND_TABLE_ADDR)
         | (Mirroring::Vertical, FORTH_TABLE_ADDR)
-        | (Mirroring::Horizontal, THERED_TABLE_ADDR)
+        | (Mirroring::Horizontal, THIRD_TABLE_ADDR)
         | (Mirroring::Horizontal, FORTH_TABLE_ADDR) => (
             &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
             &ppu.vram[0..NAME_TABLE_SIZE as usize],
@@ -70,7 +74,7 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
     render_name_table(
         ppu,
         frame,
-        main_nametable,
+        main_nt,
         Rect::new(scroll_x, scroll_y, DISPLAY_WIDTH, DISPLAY_HIGHT),
         -(scroll_x as isize),
         -(scroll_y as isize),
@@ -80,18 +84,29 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
         render_name_table(
             ppu,
             frame,
-            second_nametable,
+            right_nt,
             Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
             (DISPLAY_WIDTH - scroll_x) as isize,
             0,
         );
-    } else if scroll_y > 0 {
+    }
+    if scroll_y > 0 {
         render_name_table(
             ppu,
             frame,
-            second_nametable,
+            bottom_nt,
             Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
             0,
+            (DISPLAY_HIGHT - scroll_y) as isize,
+        );
+    }
+    if (scroll_x > 0) && (scroll_y > 0) {
+        render_name_table(
+            ppu,
+            frame,
+            bottom_right_nt,
+            Rect::new(0, 0, scroll_x, scroll_y),
+            (DISPLAY_WIDTH - scroll_x) as isize,
             (DISPLAY_HIGHT - scroll_y) as isize,
         );
     }
@@ -127,6 +142,44 @@ fn bg_pallete(
     ]
 }
 
+fn get_nametables(ppu: &Ppu, base_addr: u16) -> (&[u8], &[u8], &[u8], &[u8]) {
+    use Mirroring::*;
+
+    match ppu.mirroring {
+        Vertical => match base_addr {
+            FIRST_TABLE_ADDR => (
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+            ),
+            SECOND_TABLE_ADDR => (
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+            ),
+            _ => panic!("invalid nametable address for vertical mirroring"),
+        },
+        Horizontal => match base_addr {
+            FIRST_TABLE_ADDR => (
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+            ),
+            SECOND_TABLE_ADDR => (
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+                &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+                &ppu.vram[0..NAME_TABLE_SIZE as usize],
+            ),
+            _ => panic!("invalid nametable address for vertical mirroring"),
+        },
+        FourScreen => panic!("four screen not implemented yet"),
+    }
+}
+
 fn draw_sprites(ppu: &Ppu, frame: &mut Frame) {
     for i in (0..ppu.oam_data.len()).step_by(SPRITE_SIZE).rev() {
         let tile_idx = ppu.oam_data[i + SPRITE_INDEX_BYTE] as u16;
@@ -137,10 +190,10 @@ fn draw_sprites(ppu: &Ppu, frame: &mut Frame) {
         let flip_ver = (tile_attr & SPRITE_FLIP_VER) != 0;
         let flip_hor = (tile_attr & SPRITE_FLIP_HOR) != 0;
 
-        let palette_idx = tile_attr & SPRITE_PALETTE;
+        let palette_idx = tile_attr & SPRITE_PALETTE_MASK;
         let sprite_palette = sprite_palette(ppu, palette_idx);
 
-        let bank = ppu.ctrl_reg.sprt_pattern_addr() as u16;
+        let bank = ppu.ctrl_reg.sprt_pattern_addr();
 
         let rom_idx = bank as usize + tile_idx as usize * TILE_SIZE;
         let tile = &ppu.chr_rom[rom_idx..(rom_idx + TILE_SIZE)];
@@ -167,19 +220,15 @@ fn draw_sprites(ppu: &Ppu, frame: &mut Frame) {
                 };
 
                 if color {
-                    match (flip_hor, flip_ver) {
-                        (false, false) => frame.set_pixel(tile_x + x, tile_y + y, rgb),
-                        (true, false) => {
-                            frame.set_pixel(tile_x + TILE_WIDTH - 1 - x, tile_y + y, rgb)
-                        }
-                        (false, true) => {
-                            frame.set_pixel(tile_x + x, tile_y + TILE_HIGHT - 1 - y, rgb)
-                        }
-                        (true, true) => frame.set_pixel(
-                            tile_x + TILE_WIDTH - 1 - x,
-                            tile_y + TILE_HIGHT - 1 - y,
-                            rgb,
-                        ),
+                    let (pixel_x, pixel_y) = match (flip_hor, flip_ver) {
+                        (false, false) => (tile_x + x, tile_y + y),
+                        (true, false) => (tile_x + TILE_WIDTH - 1 - x, tile_y + y),
+                        (false, true) => (tile_x + x, tile_y + TILE_HIGHT - 1 - y),
+                        (true, true) => (tile_x + TILE_WIDTH - 1 - x, tile_y + TILE_HIGHT - 1 - y),
+                    };
+
+                    if (pixel_x < DISPLAY_WIDTH) && (pixel_y < DISPLAY_HIGHT) {
+                        frame.set_pixel(pixel_x, pixel_y, rgb);
                     }
                 }
             }
@@ -188,7 +237,7 @@ fn draw_sprites(ppu: &Ppu, frame: &mut Frame) {
 }
 
 fn sprite_palette(ppu: &Ppu, pal_idx: u8) -> [u8; NUM_OF_SPRITE_PALETTES] {
-    let start = SPRITE_PALETTE as usize + (pal_idx as usize) * SPRITE_SIZE;
+    let start = START_SPRITE_PALETTE_OFFSET as usize + (pal_idx as usize) * SPRITE_SIZE;
 
     [
         0,

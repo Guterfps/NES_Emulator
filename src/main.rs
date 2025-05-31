@@ -121,7 +121,7 @@ fn game_test() {
         .create_texture_target(pixel_format, 256 * 2, 240)
         .unwrap();
 
-    let program = std::fs::read("roms/games/Pac-Man.nes").unwrap();
+    let program = std::fs::read("roms/games/super_mario.nes").unwrap();
     let rom = Rom::new(&program).unwrap();
 
     let mut frame = Frame::new();

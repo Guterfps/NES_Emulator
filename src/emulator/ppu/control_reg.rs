@@ -13,6 +13,9 @@ pub const GENERATE_NMI_FLAG: u8 = 0b1000_0000;
 const BACKGROUND_PATTERN_TABLE_ADDR_0: u16 = 0x0000;
 const BACKGROUND_PATTERN_TABLE_ADDR_1: u16 = 0x1000;
 
+const SPRITE_PATTERN_TABLE_ADDR_0: u16 = 0x0000;
+const SPRITE_PATTERN_TABLE_ADDR_1: u16 = 0x1000;
+
 const NAME_TABLE_SIZE: u16 = 0x400;
 const NAME_TABLES_ADRESS: u16 = 0x2000;
 
@@ -51,8 +54,12 @@ impl ControlReg {
         }
     }
 
-    pub fn sprt_pattern_addr(&self) -> u8 {
-        self.flags & SPRITE_PATTERN_ADDR
+    pub fn sprt_pattern_addr(&self) -> u16 {
+        if (self.flags & SPRITE_PATTERN_ADDR) != 0 {
+            SPRITE_PATTERN_TABLE_ADDR_1
+        } else {
+            SPRITE_PATTERN_TABLE_ADDR_0
+        }
     }
 
     pub fn nametable_addr(&self) -> u16 {

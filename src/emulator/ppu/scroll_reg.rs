@@ -1,23 +1,34 @@
 pub struct ScrollReg {
     x: u8,
     y: u8,
-}
-
-pub enum Mode {
-    X,
-    Y,
+    latch: bool,
 }
 
 impl ScrollReg {
     pub fn new() -> Self {
-        ScrollReg { x: 0, y: 0 }
+        ScrollReg {
+            x: 0,
+            y: 0,
+            latch: false,
+        }
     }
 
-    pub fn update(&mut self, mode: Mode, value: u8) {
-        match mode {
-            Mode::X => self.x = value,
-            Mode::Y => self.y = value,
+    pub fn write(&mut self, value: u8) {
+        if !self.latch {
+            self.x = value;
+        } else {
+            self.y = value;
         }
+
+        self.togle_latch();
+    }
+
+    fn togle_latch(&mut self) {
+        self.latch = !self.latch;
+    }
+
+    pub fn reset_latch(&mut self) {
+        self.latch = false;
     }
 
     pub fn scroll_x(&self) -> u8 {

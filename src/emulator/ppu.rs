@@ -89,8 +89,11 @@ impl Ppu {
     }
 
     pub fn read_status(&mut self) -> u8 {
+        let data = self.status_reg.get();
+        self.status_reg.reset_vblank();
         self.addr_reg.reset_latch();
-        self.status_reg.get()
+        self.scroll_reg.reset_latch();
+        data
     }
 
     pub fn write_to_oam_addr(&mut self, value: u8) {
@@ -107,13 +110,7 @@ impl Ppu {
     }
 
     pub fn write_to_scroll(&mut self, value: u8) {
-        if self.addr_reg.get_latch() {
-            self.scroll_reg.update(scroll_reg::Mode::X, value);
-        } else {
-            self.scroll_reg.update(scroll_reg::Mode::Y, value);
-        }
-
-        self.addr_reg.toggle_latch();
+        self.scroll_reg.write(value);
     }
 
     pub fn write_to_ppu_addr(&mut self, value: u8) {
@@ -239,10 +236,6 @@ impl Ppu {
             (Horizontal, NAME_TABLE_3) => vram_indx - (2 * NAME_TABLE_SIZE),
             _ => vram_indx,
         }
-    }
-
-    pub fn get_nmi_interrupt(&self) -> Option<u8> {
-        self.nmi_interrupt
     }
 
     pub fn take_nmi_interrupt(&mut self) -> Option<u8> {

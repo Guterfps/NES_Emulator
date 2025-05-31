@@ -3,8 +3,8 @@ pub struct MaskReg {
 }
 
 pub const GREY_SCALE_FLAG: u8 = 0b0000_0001;
-pub const SHOW_BACKGROUND_FLAG: u8 = 0b0000_0010;
-pub const SHOW_SPRITES_FLAG: u8 = 0b0000_0100;
+pub const SHOW_BACKGROUND_IN_LEFT_8_PIXELS_FLAG: u8 = 0b0000_0010;
+pub const SHOW_SPRITES_IN_LEFT_8_PIXELS_FLAG: u8 = 0b0000_0100;
 pub const ENABLE_BACKGROUND_RENDERING_FLAG: u8 = 0b0000_1000;
 pub const ENABLE_SPRITE_RENDERING_FLAG: u8 = 0b0001_0000;
 pub const EMPHASIZE_RED_FLAG: u8 = 0b0010_0000;
@@ -25,6 +25,6 @@ impl MaskReg {
     }
 
     pub fn show_sprites(&self) -> bool {
-        (self.flags & SHOW_SPRITES_FLAG) != 0
+        (self.flags & ENABLE_SPRITE_RENDERING_FLAG) != 0
     }
 }
