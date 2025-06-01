@@ -49,9 +49,9 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
     let scroll_y = ppu.scroll_reg.scroll_y() as usize;
     let base_nametable = ppu.ctrl_reg.nametable_addr();
 
-    let (main_nt, right_nt, bottom_nt, bottom_right_nt) = get_nametables(ppu, base_nametable);
+    // let (main_nt, right_nt, bottom_nt, bottom_right_nt) = get_nametables(ppu, base_nametable);
 
-    let (main_nametable, second_nametable) = match (&ppu.mirroring, ppu.ctrl_reg.nametable_addr()) {
+    let (main_nametable, second_nametable) = match (&ppu.mirroring, base_nametable) {
         (Mirroring::Vertical, FIRST_TABLE_ADDR)
         | (Mirroring::Vertical, THIRD_TABLE_ADDR)
         | (Mirroring::Horizontal, FIRST_TABLE_ADDR)
@@ -74,7 +74,7 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
     render_name_table(
         ppu,
         frame,
-        main_nt,
+        main_nametable,
         Rect::new(scroll_x, scroll_y, DISPLAY_WIDTH, DISPLAY_HIGHT),
         -(scroll_x as isize),
         -(scroll_y as isize),
@@ -84,32 +84,51 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
         render_name_table(
             ppu,
             frame,
-            right_nt,
+            second_nametable,
             Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
             (DISPLAY_WIDTH - scroll_x) as isize,
             0,
         );
-    }
-    if scroll_y > 0 {
+    } else if scroll_y > 0 {
         render_name_table(
             ppu,
             frame,
-            bottom_nt,
+            second_nametable,
             Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
             0,
             (DISPLAY_HIGHT - scroll_y) as isize,
         );
     }
-    if (scroll_x > 0) && (scroll_y > 0) {
-        render_name_table(
-            ppu,
-            frame,
-            bottom_right_nt,
-            Rect::new(0, 0, scroll_x, scroll_y),
-            (DISPLAY_WIDTH - scroll_x) as isize,
-            (DISPLAY_HIGHT - scroll_y) as isize,
-        );
-    }
+    // if scroll_x > 0 {
+    //     render_name_table(
+    //         ppu,
+    //         frame,
+    //         right_nt,
+    //         Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
+    //         (DISPLAY_WIDTH - scroll_x) as isize,
+    //         0,
+    //     );
+    // }
+    // if scroll_y > 0 {
+    //     render_name_table(
+    //         ppu,
+    //         frame,
+    //         bottom_nt,
+    //         Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
+    //         0,
+    //         (DISPLAY_HIGHT - scroll_y) as isize,
+    //     );
+    // }
+    // if (scroll_x > 0) && (scroll_y > 0) {
+    //     render_name_table(
+    //         ppu,
+    //         frame,
+    //         bottom_right_nt,
+    //         Rect::new(0, 0, scroll_x, scroll_y),
+    //         (DISPLAY_WIDTH - scroll_x) as isize,
+    //         (DISPLAY_HIGHT - scroll_y) as isize,
+    //     );
+    // }
 }
 
 fn bg_pallete(

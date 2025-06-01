@@ -2,17 +2,13 @@ use super::{MIRRORS_ADDR, control_reg::AddressInc};
 
 pub struct AddressReg {
     value: (u8, u8),
-    latch: bool,
 }
 
 const MIRRORS_MASK: u16 = 0b1111_1111_1111_1111;
 
 impl AddressReg {
     pub fn new() -> Self {
-        AddressReg {
-            value: (0, 0),
-            latch: (false),
-        }
+        AddressReg { value: (0, 0) }
     }
 
     fn set(&mut self, data: u16) {
@@ -23,15 +19,14 @@ impl AddressReg {
         u16::from_be_bytes([self.value.0, self.value.1])
     }
 
-    pub fn update(&mut self, data: u8) {
-        if !self.latch {
+    pub fn update(&mut self, data: u8, latch: bool) {
+        if !latch {
             self.value.0 = data;
         } else {
             self.value.1 = data;
         }
 
         self.mirror_down_addr();
-        self.toggle_latch();
     }
 
     pub fn increment(&mut self, inc: AddressInc) {
@@ -49,17 +44,5 @@ impl AddressReg {
         if value >= MIRRORS_ADDR {
             self.set(value & MIRRORS_MASK);
         }
-    }
-
-    pub fn reset_latch(&mut self) {
-        self.latch = false;
-    }
-
-    pub fn toggle_latch(&mut self) {
-        self.latch = !self.latch;
-    }
-
-    pub fn get_latch(&self) -> bool {
-        self.latch
     }
 }

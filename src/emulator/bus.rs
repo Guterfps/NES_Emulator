@@ -62,9 +62,11 @@ impl<'a> Bus<'a> {
     pub fn tick(&mut self, cycles: u8) {
         self.cycles += cycles as usize;
 
-        let new_frame = self.ppu.tick(cycles * PPU_CPU_CYCLES_RATIO);
+        let nmi_before = self.ppu.is_nmi_interrupt();
+        self.ppu.tick(cycles * PPU_CPU_CYCLES_RATIO);
+        let nmi_after = self.ppu.is_nmi_interrupt();
 
-        if new_frame {
+        if !nmi_before && nmi_after {
             (self.gameloop_callback)(&self.ppu, &mut self.joy_pad);
         }
     }

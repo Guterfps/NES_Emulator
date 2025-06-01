@@ -1,5 +1,6 @@
 mod address_reg;
 mod control_reg;
+mod internal_regs;
 mod mask_reg;
 pub mod render;
 mod scroll_reg;
@@ -10,6 +11,7 @@ use core::panic;
 use super::rom::Mirroring;
 use address_reg::AddressReg;
 use control_reg::*;
+use internal_regs::*;
 use mask_reg::MaskReg;
 use scroll_reg::ScrollReg;
 use status_reg::StatusReg;
@@ -26,7 +28,7 @@ pub struct Ppu {
     oam_addr_reg: u8,
     scroll_reg: ScrollReg,
     addr_reg: AddressReg,
-    oam_dma_reg: u8,
+    internal_regs: InternalRegs,
     internal_data_buf: u8,
     scanline: u16,
     cycles: usize,
@@ -68,7 +70,7 @@ impl Ppu {
             oam_addr_reg: 0,
             scroll_reg: ScrollReg::new(),
             addr_reg: AddressReg::new(),
-            oam_dma_reg: 0,
+            internal_regs: InternalRegs::new(),
             internal_data_buf: 0,
             scanline: 0,
             cycles: 0,
@@ -79,6 +81,7 @@ impl Ppu {
     pub fn write_to_ctrl(&mut self, value: u8) {
         let prev_nmi_status = self.ctrl_reg.gen_vblank_nmi();
         self.ctrl_reg.update(value);
+        self.internal_regs.ctrl_write(value);
         if !prev_nmi_status && self.ctrl_reg.gen_vblank_nmi() && self.status_reg.is_in_vblank() {
             self.nmi_interrupt = Some(1);
         }
@@ -91,8 +94,7 @@ impl Ppu {
     pub fn read_status(&mut self) -> u8 {
         let data = self.status_reg.get();
         self.status_reg.reset_vblank();
-        self.addr_reg.reset_latch();
-        self.scroll_reg.reset_latch();
+        self.internal_regs.status_read();
         data
     }
 
@@ -110,11 +112,13 @@ impl Ppu {
     }
 
     pub fn write_to_scroll(&mut self, value: u8) {
-        self.scroll_reg.write(value);
+        self.scroll_reg.write(value, self.internal_regs.get_w());
+        self.internal_regs.scroll_write(value);
     }
 
     pub fn write_to_ppu_addr(&mut self, value: u8) {
-        self.addr_reg.update(value);
+        self.addr_reg.update(value, self.internal_regs.get_w());
+        self.internal_regs.addr_write(value);
     }
 
     pub fn write_to_data(&mut self, value: u8) {
@@ -240,5 +244,9 @@ impl Ppu {
 
     pub fn take_nmi_interrupt(&mut self) -> Option<u8> {
         self.nmi_interrupt.take()
+    }
+
+    pub fn is_nmi_interrupt(&self) -> bool {
+        self.nmi_interrupt.is_some()
     }
 }
