@@ -63,15 +63,15 @@ impl<'a> Bus<'a> {
     pub fn tick(&mut self, cycles: u8) {
         self.cycles += cycles as usize;
 
-        let nmi_before = self.ppu.is_nmi_interrupt();
-        self.ppu.tick(cycles * PPU_CPU_CYCLES_RATIO);
-        let nmi_after = self.ppu.is_nmi_interrupt();
+        for _ in 0..cycles {
+            let nmi_before = self.ppu.is_nmi_interrupt();
+            self.ppu.tick();
+            let nmi_after = self.ppu.is_nmi_interrupt();
 
-        if !nmi_before && nmi_after {
-            (self.gameloop_callback)(&self.ppu, &mut self.joy_pad);
+            if !nmi_before && nmi_after {
+                (self.gameloop_callback)(&self.ppu, &mut self.joy_pad);
+            }
         }
-
-        self.cpu_cycles_slow_down(cycles);
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<u8> {
@@ -84,13 +84,6 @@ impl<'a> Bus<'a> {
             rom_addr &= PRG_ROM_PAGE_SIZE - 1;
         }
         self.prg_rom[rom_addr as usize]
-    }
-
-    fn cpu_cycles_slow_down(&mut self, cycles: u8) {
-        let mut cpu_time = CPU_CYCLE_TIME * cycles as u64;
-        while cpu_time > 0 {
-            cpu_time -= 1;
-        }
     }
 }
 

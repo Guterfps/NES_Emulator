@@ -27,4 +27,8 @@ impl MaskReg {
     pub fn show_sprites(&self) -> bool {
         (self.flags & ENABLE_SPRITE_RENDERING_FLAG) != 0
     }
+
+    pub fn show_background(&self) -> bool {
+        (self.flags & ENABLE_BACKGROUND_RENDERING_FLAG) != 0
+    }
 }

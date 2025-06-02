@@ -45,90 +45,90 @@ pub fn render(ppu: &Ppu, frame: &mut Frame) {
 }
 
 fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
-    let scroll_x = ppu.scroll_reg.scroll_x() as usize;
-    let scroll_y = ppu.scroll_reg.scroll_y() as usize;
-    let base_nametable = ppu.ctrl_reg.nametable_addr();
+    let scroll_x = ppu.internal_regs.get_scroll_x() as usize;
+    let scroll_y = ppu.internal_regs.get_scroll_y() as usize;
+    let base_nametable = VRAM_ADDR + ppu.internal_regs.get_nametable_select() * NAME_TABLE_SIZE;
 
-    // let (main_nt, right_nt, bottom_nt, bottom_right_nt) = get_nametables(ppu, base_nametable);
+    let (main_nt, right_nt, bottom_nt, bottom_right_nt) = get_nametables(ppu, base_nametable);
 
-    let (main_nametable, second_nametable) = match (&ppu.mirroring, base_nametable) {
-        (Mirroring::Vertical, FIRST_TABLE_ADDR)
-        | (Mirroring::Vertical, THIRD_TABLE_ADDR)
-        | (Mirroring::Horizontal, FIRST_TABLE_ADDR)
-        | (Mirroring::Horizontal, SECOND_TABLE_ADDR) => (
-            &ppu.vram[0..NAME_TABLE_SIZE as usize],
-            &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
-        ),
-        (Mirroring::Vertical, SECOND_TABLE_ADDR)
-        | (Mirroring::Vertical, FORTH_TABLE_ADDR)
-        | (Mirroring::Horizontal, THIRD_TABLE_ADDR)
-        | (Mirroring::Horizontal, FORTH_TABLE_ADDR) => (
-            &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
-            &ppu.vram[0..NAME_TABLE_SIZE as usize],
-        ),
-        (_, _) => {
-            panic!("not supported mirroring type {:?}", ppu.mirroring);
-        }
-    };
+    // let (main_nametable, second_nametable) = match (&ppu.mirroring, base_nametable) {
+    //     (Mirroring::Vertical, FIRST_TABLE_ADDR)
+    //     | (Mirroring::Vertical, THIRD_TABLE_ADDR)
+    //     | (Mirroring::Horizontal, FIRST_TABLE_ADDR)
+    //     | (Mirroring::Horizontal, SECOND_TABLE_ADDR) => (
+    //         &ppu.vram[0..NAME_TABLE_SIZE as usize],
+    //         &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+    //     ),
+    //     (Mirroring::Vertical, SECOND_TABLE_ADDR)
+    //     | (Mirroring::Vertical, FORTH_TABLE_ADDR)
+    //     | (Mirroring::Horizontal, THIRD_TABLE_ADDR)
+    //     | (Mirroring::Horizontal, FORTH_TABLE_ADDR) => (
+    //         &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
+    //         &ppu.vram[0..NAME_TABLE_SIZE as usize],
+    //     ),
+    //     (_, _) => {
+    //         panic!("not supported mirroring type {:?}", ppu.mirroring);
+    //     }
+    // };
 
     render_name_table(
         ppu,
         frame,
-        main_nametable,
+        main_nt,
         Rect::new(scroll_x, scroll_y, DISPLAY_WIDTH, DISPLAY_HIGHT),
         -(scroll_x as isize),
         -(scroll_y as isize),
     );
 
-    if scroll_x > 0 {
-        render_name_table(
-            ppu,
-            frame,
-            second_nametable,
-            Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
-            (DISPLAY_WIDTH - scroll_x) as isize,
-            0,
-        );
-    } else if scroll_y > 0 {
-        render_name_table(
-            ppu,
-            frame,
-            second_nametable,
-            Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
-            0,
-            (DISPLAY_HIGHT - scroll_y) as isize,
-        );
-    }
     // if scroll_x > 0 {
     //     render_name_table(
     //         ppu,
     //         frame,
-    //         right_nt,
+    //         second_nametable,
     //         Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
     //         (DISPLAY_WIDTH - scroll_x) as isize,
     //         0,
     //     );
-    // }
-    // if scroll_y > 0 {
+    // } else if scroll_y > 0 {
     //     render_name_table(
     //         ppu,
     //         frame,
-    //         bottom_nt,
+    //         second_nametable,
     //         Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
     //         0,
     //         (DISPLAY_HIGHT - scroll_y) as isize,
     //     );
     // }
-    // if (scroll_x > 0) && (scroll_y > 0) {
-    //     render_name_table(
-    //         ppu,
-    //         frame,
-    //         bottom_right_nt,
-    //         Rect::new(0, 0, scroll_x, scroll_y),
-    //         (DISPLAY_WIDTH - scroll_x) as isize,
-    //         (DISPLAY_HIGHT - scroll_y) as isize,
-    //     );
-    // }
+    if scroll_x > 0 {
+        render_name_table(
+            ppu,
+            frame,
+            right_nt,
+            Rect::new(0, scroll_y, scroll_x, DISPLAY_HIGHT),
+            DISPLAY_WIDTH as isize - scroll_x as isize,
+            -(scroll_y as isize),
+        );
+    }
+    if scroll_y > 0 {
+        render_name_table(
+            ppu,
+            frame,
+            bottom_nt,
+            Rect::new(scroll_x, 0, DISPLAY_WIDTH, scroll_y),
+            -(scroll_x as isize),
+            DISPLAY_HIGHT as isize - scroll_y as isize,
+        );
+    }
+    if (scroll_x > 0) && (scroll_y > 0) {
+        render_name_table(
+            ppu,
+            frame,
+            bottom_right_nt,
+            Rect::new(0, 0, scroll_x, scroll_y),
+            DISPLAY_WIDTH as isize - scroll_x as isize,
+            DISPLAY_HIGHT as isize - scroll_y as isize,
+        );
+    }
 }
 
 fn bg_pallete(
@@ -166,13 +166,13 @@ fn get_nametables(ppu: &Ppu, base_addr: u16) -> (&[u8], &[u8], &[u8], &[u8]) {
 
     match ppu.mirroring {
         Vertical => match base_addr {
-            FIRST_TABLE_ADDR => (
+            FIRST_TABLE_ADDR | THIRD_TABLE_ADDR => (
                 &ppu.vram[0..NAME_TABLE_SIZE as usize],
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
                 &ppu.vram[0..NAME_TABLE_SIZE as usize],
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
             ),
-            SECOND_TABLE_ADDR => (
+            SECOND_TABLE_ADDR | FORTH_TABLE_ADDR => (
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
                 &ppu.vram[0..NAME_TABLE_SIZE as usize],
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
@@ -181,13 +181,13 @@ fn get_nametables(ppu: &Ppu, base_addr: u16) -> (&[u8], &[u8], &[u8], &[u8]) {
             _ => panic!("invalid nametable address for vertical mirroring"),
         },
         Horizontal => match base_addr {
-            FIRST_TABLE_ADDR => (
+            FIRST_TABLE_ADDR | SECOND_TABLE_ADDR => (
                 &ppu.vram[0..NAME_TABLE_SIZE as usize],
                 &ppu.vram[0..NAME_TABLE_SIZE as usize],
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
             ),
-            SECOND_TABLE_ADDR => (
+            THIRD_TABLE_ADDR | FORTH_TABLE_ADDR => (
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
                 &ppu.vram[NAME_TABLE_SIZE as usize..TWO_NAMETABLE_SIZE as usize],
                 &ppu.vram[0..NAME_TABLE_SIZE as usize],

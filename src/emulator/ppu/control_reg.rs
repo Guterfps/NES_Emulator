@@ -30,6 +30,10 @@ impl ControlReg {
         ControlReg { flags: 0 }
     }
 
+    pub fn addr_inc(&self) -> bool {
+        (self.flags & VRAM_ADDR_INC_FLAG) != 0
+    }
+
     pub fn vram_addr_increment(&self) -> AddressInc {
         if (self.flags & VRAM_ADDR_INC_FLAG) != 0 {
             AddressInc::GoingDown

@@ -1,4 +1,4 @@
-use super::VRAM_ADDR;
+use super::{VRAM_ADDR, control_reg::AddressInc};
 
 pub struct InternalRegs {
     v: u16,
@@ -60,6 +60,14 @@ impl InternalRegs {
         self.togle_w();
     }
 
+    pub fn data_read_write(&mut self, inc_bit: bool) {
+        if inc_bit {
+            self.v += AddressInc::GoingDown as u16;
+        } else {
+            self.v += AddressInc::GoingAcross as u16;
+        }
+    }
+
     pub fn get_w(&self) -> bool {
         self.w
     }
@@ -97,6 +105,26 @@ impl InternalRegs {
 
     pub fn fetch_attr_addr(&self) -> u16 {
         0x23C0 | (self.v & 0x0C00) | ((self.v >> 4) & 0x38) | ((self.v >> 2) & 0x07)
+    }
+
+    pub fn get_scroll_x(&self) -> u16 {
+        ((self.v & COARSE_X_SCROLL) << 3) + self.x as u16
+    }
+
+    pub fn get_scroll_y(&self) -> u16 {
+        (((self.v & COARSE_Y_SCROLL) >> 5) << 3) + ((self.v & FINE_Y_SCROLL) >> 12)
+    }
+
+    pub fn get_nametable_select(&self) -> u16 {
+        (self.v & NAMETABLE_SELECT) >> 10
+    }
+
+    pub fn dot_257(&mut self) {
+        self.v = assign_bits(self.v, self.t, 0b0000_0100_0001_1111);
+    }
+
+    pub fn dot_280_to_304(&mut self) {
+        self.v = assign_bits(self.v, self.t, 0b0111_1011_1110_0000);
     }
 
     fn togle_w(&mut self) {

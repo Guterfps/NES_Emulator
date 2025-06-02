@@ -1,6 +1,7 @@
 mod emulator;
 
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use emulator::bus::Bus;
 use emulator::cpu::CPU6502;
@@ -136,6 +137,9 @@ fn game_test() {
     key_map.insert(Keycode::A, joypad::Buttons::A);
     key_map.insert(Keycode::S, joypad::Buttons::B);
 
+    let mut time = Instant::now();
+    const FRAME_RATE: f32 = 1.0 / 60.0;
+
     let bus = Bus::new(rom, move |ppu: &Ppu, joypad: &mut JoyPad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
@@ -164,6 +168,9 @@ fn game_test() {
                 _ => {}
             }
         }
+
+        while time.elapsed().as_secs_f32() < FRAME_RATE {}
+        time = Instant::now();
     });
 
     let mut cpu = CPU6502::new(bus);

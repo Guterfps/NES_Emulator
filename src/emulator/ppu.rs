@@ -52,9 +52,15 @@ const NAME_TABLE_1: u16 = 1;
 const NAME_TABLE_2: u16 = 2;
 const NAME_TABLE_3: u16 = 3;
 
+const VISIBLE_SCANLINES: u16 = 239;
 const SCANLINES_PER_FRAME: u16 = 262;
 const CYCLES_PER_SCANLINE: usize = 341;
 const VERTICAL_BLANKING_LINES: u16 = 241;
+const DOT_256_IN_SCANLINE: usize = 256;
+const DOT_257_IN_SCANLINE: usize = 257;
+const DOT_280_IN_SCANLINE: usize = 280;
+const DOT_304_IN_SCANLINE: usize = 304;
+const DOT_328_IN_SCANLINE: usize = 328;
 
 impl Ppu {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
@@ -140,11 +146,13 @@ impl Ppu {
             _ => panic!("unexpected access to mirrored space {addr}"),
         }
         self.increment_vram_addr();
+        // self.handle_data_internal_regs();
     }
 
     pub fn read_data(&mut self) -> u8 {
         let addr = self.addr_reg.get();
         self.increment_vram_addr();
+        // self.handle_data_internal_regs();
 
         match addr {
             ROM_ADDR..VRAM_ADDR => {
@@ -165,6 +173,15 @@ impl Ppu {
         }
     }
 
+    fn handle_data_internal_regs(&mut self) {
+        if self.is_rendering() && (self.scanline <= VISIBLE_SCANLINES) {
+            self.internal_regs.coarse_x_inc();
+            self.internal_regs.coarse_y_inc();
+        } else {
+            self.internal_regs.data_read_write(self.ctrl_reg.addr_inc());
+        }
+    }
+
     fn get_palette_table_index(addr: u16) -> usize {
         let mut index = addr & (PALETTE_TABLE_SIZE - 1) as u16;
 
@@ -182,9 +199,25 @@ impl Ppu {
         }
     }
 
-    pub fn tick(&mut self, cycles: u8) -> bool {
-        self.cycles += cycles as usize;
-        let mut res = false;
+    pub fn tick(&mut self) {
+        self.cycles += 1;
+
+        if self.is_rendering() {
+            if ((self.cycles >= DOT_328_IN_SCANLINE) || (self.cycles <= DOT_256_IN_SCANLINE))
+                && ((self.cycles & (8 - 1)) == 0)
+            {
+                self.internal_regs.coarse_x_inc();
+            }
+            if self.cycles == DOT_256_IN_SCANLINE {
+                self.internal_regs.coarse_y_inc();
+            }
+            if self.cycles == DOT_257_IN_SCANLINE {
+                self.internal_regs.dot_257();
+            }
+            if (self.cycles >= DOT_280_IN_SCANLINE) && (self.cycles <= DOT_304_IN_SCANLINE) {
+                self.internal_regs.dot_280_to_304();
+            }
+        }
 
         if self.cycles >= CYCLES_PER_SCANLINE {
             if self.is_sprite_0_hit(self.cycles) {
@@ -208,18 +241,19 @@ impl Ppu {
                 self.nmi_interrupt = None;
                 self.status_reg.unset_sprite_zero_hit();
                 self.status_reg.reset_vblank();
-                res = true;
             }
         }
+    }
 
-        res
+    fn is_rendering(&self) -> bool {
+        self.mask_reg.show_sprites() | self.mask_reg.show_background()
     }
 
     fn is_sprite_0_hit(&self, cycle: usize) -> bool {
         let y = self.oam_data[0] as usize;
         let x = self.oam_data[3] as usize;
 
-        (y == self.scanline as usize) && (x <= cycle) && (self.mask_reg.show_sprites())
+        (y == self.scanline as usize) && (x <= cycle) && (self.is_rendering())
     }
 
     fn increment_vram_addr(&mut self) {
