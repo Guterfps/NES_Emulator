@@ -40,6 +40,7 @@ const PPU_OAM_DMA_REG: u16 = 0x4014;
 const JOYPAD_ADDR: u16 = 0x4016;
 
 const PPU_CPU_CYCLES_RATIO: u8 = 3;
+const CPU_CYCLE_TIME: u64 = 559;
 
 const PAGE_SIZE: usize = 256;
 const BYTE_SIZE: u8 = 8;
@@ -69,6 +70,8 @@ impl<'a> Bus<'a> {
         if !nmi_before && nmi_after {
             (self.gameloop_callback)(&self.ppu, &mut self.joy_pad);
         }
+
+        self.cpu_cycles_slow_down(cycles);
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<u8> {
@@ -81,6 +84,13 @@ impl<'a> Bus<'a> {
             rom_addr &= PRG_ROM_PAGE_SIZE - 1;
         }
         self.prg_rom[rom_addr as usize]
+    }
+
+    fn cpu_cycles_slow_down(&mut self, cycles: u8) {
+        let mut cpu_time = CPU_CYCLE_TIME * cycles as u64;
+        while cpu_time > 0 {
+            cpu_time -= 1;
+        }
     }
 }
 

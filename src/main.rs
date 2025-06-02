@@ -10,7 +10,7 @@ use emulator::ppu::render;
 use emulator::ppu::render::frame::Frame;
 use emulator::rom::Rom;
 
-use emulator::cpu::trace;
+// use emulator::cpu::trace;
 
 use rand::Rng;
 use sdl3::EventPump;
