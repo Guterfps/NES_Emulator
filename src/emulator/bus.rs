@@ -40,7 +40,6 @@ const PPU_OAM_DMA_REG: u16 = 0x4014;
 const JOYPAD_ADDR: u16 = 0x4016;
 
 const PPU_CPU_CYCLES_RATIO: u8 = 3;
-const CPU_CYCLE_TIME: u64 = 559;
 
 const PAGE_SIZE: usize = 256;
 const BYTE_SIZE: u8 = 8;
@@ -63,7 +62,7 @@ impl<'a> Bus<'a> {
     pub fn tick(&mut self, cycles: u8) {
         self.cycles += cycles as usize;
 
-        for _ in 0..cycles {
+        for _ in 0..(cycles * PPU_CPU_CYCLES_RATIO) {
             let nmi_before = self.ppu.is_nmi_interrupt();
             self.ppu.tick();
             let nmi_after = self.ppu.is_nmi_interrupt();

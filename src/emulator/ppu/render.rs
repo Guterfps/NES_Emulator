@@ -104,9 +104,9 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
             ppu,
             frame,
             right_nt,
-            Rect::new(0, scroll_y, scroll_x, DISPLAY_HIGHT),
+            Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
             DISPLAY_WIDTH as isize - scroll_x as isize,
-            -(scroll_y as isize),
+            0,
         );
     }
     if scroll_y > 0 {
@@ -114,8 +114,8 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
             ppu,
             frame,
             bottom_nt,
-            Rect::new(scroll_x, 0, DISPLAY_WIDTH, scroll_y),
-            -(scroll_x as isize),
+            Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
+            0,
             DISPLAY_HIGHT as isize - scroll_y as isize,
         );
     }

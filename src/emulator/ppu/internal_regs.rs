@@ -127,6 +127,10 @@ impl InternalRegs {
         self.v = assign_bits(self.v, self.t, 0b0111_1011_1110_0000);
     }
 
+    pub fn get_v(&self) -> u16 {
+        self.v
+    }
+
     fn togle_w(&mut self) {
         self.w = !self.w;
     }
