@@ -33,6 +33,7 @@ pub struct Ppu {
     scanline: u16,
     cycles: usize,
     nmi_interrupt: Option<u8>,
+    is_odd_frame: bool,
 }
 
 const PALETTE_TABLE_SIZE: usize = 32;
@@ -61,6 +62,7 @@ const DOT_257_IN_SCANLINE: usize = 257;
 const DOT_280_IN_SCANLINE: usize = 280;
 const DOT_304_IN_SCANLINE: usize = 304;
 const DOT_328_IN_SCANLINE: usize = 328;
+const PRE_RENDER_SCANLINE: u16 = 261;
 
 impl Ppu {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
@@ -81,6 +83,7 @@ impl Ppu {
             scanline: 0,
             cycles: 0,
             nmi_interrupt: None,
+            is_odd_frame: false,
         }
     }
 
@@ -128,7 +131,8 @@ impl Ppu {
     }
 
     pub fn write_to_data(&mut self, value: u8) {
-        let addr = self.addr_reg.get();
+        // let addr = self.addr_reg.get();
+        let addr = self.internal_regs.get_v() & 0x3FFF;
 
         match addr {
             ROM_ADDR..VRAM_ADDR => {
@@ -145,14 +149,15 @@ impl Ppu {
             }
             _ => panic!("unexpected access to mirrored space {addr}"),
         }
-        self.increment_vram_addr();
-        // self.handle_data_internal_regs();
+        // self.increment_vram_addr();
+        self.handle_data_internal_regs();
     }
 
     pub fn read_data(&mut self) -> u8 {
-        let addr = self.addr_reg.get();
-        self.increment_vram_addr();
-        // self.handle_data_internal_regs();
+        let addr = self.internal_regs.get_v() & 0x3FFF;
+        // let addr = self.addr_reg.get();
+        // self.increment_vram_addr();
+        self.handle_data_internal_regs();
 
         match addr {
             ROM_ADDR..VRAM_ADDR => {
@@ -174,12 +179,7 @@ impl Ppu {
     }
 
     fn handle_data_internal_regs(&mut self) {
-        if self.is_rendering() && (self.scanline <= VISIBLE_SCANLINES) {
-            self.internal_regs.coarse_x_inc();
-            self.internal_regs.coarse_y_inc();
-        } else {
-            self.internal_regs.data_read_write(self.ctrl_reg.addr_inc());
-        }
+        self.internal_regs.data_read_write(self.ctrl_reg.addr_inc());
     }
 
     fn get_palette_table_index(addr: u16) -> usize {
@@ -200,48 +200,123 @@ impl Ppu {
     }
 
     pub fn tick(&mut self) {
-        self.cycles += 1;
+        match self.scanline {
+            0..=VISIBLE_SCANLINES => {
+                if self.is_rendering() {
+                    self.non_vblank_scanlines();
+                }
 
-        if self.is_rendering() {
-            if ((self.cycles >= DOT_328_IN_SCANLINE) || (self.cycles <= DOT_256_IN_SCANLINE))
-                && ((self.cycles & (8 - 1)) == 0)
-            {
-                self.internal_regs.coarse_x_inc();
-            }
-            if self.cycles == DOT_256_IN_SCANLINE {
-                self.internal_regs.coarse_y_inc();
-            }
-            if self.cycles == DOT_257_IN_SCANLINE {
-                self.internal_regs.dot_257();
-            }
-            if (self.cycles >= DOT_280_IN_SCANLINE) && (self.cycles <= DOT_304_IN_SCANLINE) {
-                self.internal_regs.dot_280_to_304();
-            }
-        }
-
-        if self.cycles >= CYCLES_PER_SCANLINE {
-            if self.is_sprite_0_hit(self.cycles) {
-                self.status_reg.set_sprite_zero_hit();
-            }
-
-            self.cycles -= CYCLES_PER_SCANLINE;
-            self.scanline += 1;
-
-            if self.scanline == VERTICAL_BLANKING_LINES {
-                self.status_reg.set_vblank();
-                self.status_reg.unset_sprite_zero_hit();
-
-                if self.ctrl_reg.gen_vblank_nmi() {
-                    self.nmi_interrupt = Some(1);
+                if (self.cycles <= 256) && self.is_sprite_0_hit(self.cycles) {
+                    self.status_reg.set_sprite_zero_hit();
                 }
             }
+            240 => {}
+            VERTICAL_BLANKING_LINES => {
+                if self.cycles == 1 {
+                    self.status_reg.set_vblank();
+                    self.status_reg.unset_sprite_zero_hit();
 
-            if self.scanline >= SCANLINES_PER_FRAME {
-                self.scanline = 0;
-                self.nmi_interrupt = None;
-                self.status_reg.unset_sprite_zero_hit();
-                self.status_reg.reset_vblank();
+                    if self.ctrl_reg.gen_vblank_nmi() {
+                        self.nmi_interrupt = Some(1);
+                    }
+                }
             }
+            242..PRE_RENDER_SCANLINE => {}
+            PRE_RENDER_SCANLINE => {
+                if self.is_rendering() {
+                    self.non_vblank_scanlines();
+                    if (self.cycles >= DOT_280_IN_SCANLINE) && (self.cycles <= DOT_304_IN_SCANLINE)
+                    {
+                        self.internal_regs.dot_280_to_304();
+                    }
+                }
+                if self.cycles == 1 {
+                    self.nmi_interrupt = None;
+                    self.status_reg.unset_sprite_zero_hit();
+                    self.status_reg.reset_vblank();
+                }
+            }
+            SCANLINES_PER_FRAME => {
+                self.scanline = 0;
+                self.cycles = if self.is_odd_frame { 0 } else { 1 };
+                self.is_odd_frame = !self.is_odd_frame;
+            }
+            _ => unreachable!(),
+        }
+
+        self.cycles += 1;
+        if self.cycles >= CYCLES_PER_SCANLINE {
+            self.cycles = 0;
+            self.scanline += 1;
+        }
+
+        // if self.is_rendering()
+        //     && ((self.scanline <= VISIBLE_SCANLINES) || (self.scanline == PRE_RENDER_SCANLINE))
+        // {
+        //     if (self.cycles != 0)
+        //         && (self.cycles <= DOT_256_IN_SCANLINE)
+        //         && ((self.cycles & (8 - 1)) == 0)
+        //     {
+        //         self.internal_regs.coarse_x_inc();
+        //     }
+        //     if self.cycles == DOT_256_IN_SCANLINE {
+        //         self.internal_regs.coarse_y_inc();
+        //     }
+        //     if self.cycles == DOT_257_IN_SCANLINE {
+        //         self.internal_regs.dot_257();
+        //     }
+        //     if (self.scanline == PRE_RENDER_SCANLINE)
+        //         && (self.cycles >= DOT_280_IN_SCANLINE)
+        //         && (self.cycles <= DOT_304_IN_SCANLINE)
+        //     {
+        //         self.internal_regs.dot_280_to_304();
+        //     }
+        // }
+
+        // if self.cycles >= CYCLES_PER_SCANLINE {
+        //     if self.is_sprite_0_hit(self.cycles) {
+        //         self.status_reg.set_sprite_zero_hit();
+        //     }
+
+        //     self.cycles = 0;
+        //     self.scanline += 1;
+
+        //     if self.scanline == VERTICAL_BLANKING_LINES {
+        //         self.status_reg.set_vblank();
+        //         self.status_reg.unset_sprite_zero_hit();
+
+        //         if self.ctrl_reg.gen_vblank_nmi() {
+        //             self.nmi_interrupt = Some(1);
+        //         }
+        //     }
+
+        //     if self.scanline >= SCANLINES_PER_FRAME {
+        //         if self.is_odd_frame {
+        //             self.cycles += 1;
+        //         }
+        //         self.scanline = 0;
+        //         self.nmi_interrupt = None;
+        //         self.status_reg.unset_sprite_zero_hit();
+        //         self.status_reg.reset_vblank();
+        //         self.is_odd_frame = !self.is_odd_frame;
+        //     }
+        // } else {
+        //     self.cycles += 1;
+        // }
+    }
+
+    fn non_vblank_scanlines(&mut self) {
+        if (self.cycles != 0)
+            && ((self.cycles >= DOT_328_IN_SCANLINE) || (self.cycles <= DOT_256_IN_SCANLINE))
+            && ((self.cycles & (8 - 1)) == 0)
+        {
+            self.internal_regs.coarse_x_inc();
+        }
+        if self.cycles == DOT_256_IN_SCANLINE {
+            self.internal_regs.coarse_y_inc();
+        }
+        if self.cycles == DOT_257_IN_SCANLINE {
+            self.internal_regs.dot_257();
         }
     }
 
@@ -253,7 +328,9 @@ impl Ppu {
         let y = self.oam_data[0] as usize;
         let x = self.oam_data[3] as usize;
 
-        (y == self.scanline as usize) && (x <= cycle) && (self.is_rendering())
+        (y.wrapping_add(1) == self.scanline as usize)
+            && ((cycle < x) || ((x + 8) <= cycle))
+            && (self.mask_reg.show_sprites() && self.mask_reg.show_background())
     }
 
     fn increment_vram_addr(&mut self) {

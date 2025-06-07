@@ -61,11 +61,13 @@ impl InternalRegs {
     }
 
     pub fn data_read_write(&mut self, inc_bit: bool) {
-        if inc_bit {
-            self.v += AddressInc::GoingDown as u16;
+        self.v = self.v.wrapping_add(if inc_bit {
+            AddressInc::GoingDown as u16
         } else {
-            self.v += AddressInc::GoingAcross as u16;
-        }
+            AddressInc::GoingAcross as u16
+        });
+
+        self.v &= 0x3FFF;
     }
 
     pub fn get_w(&self) -> bool {
@@ -108,15 +110,15 @@ impl InternalRegs {
     }
 
     pub fn get_scroll_x(&self) -> u16 {
-        ((self.v & COARSE_X_SCROLL) << 3) + self.x as u16
+        ((self.t & COARSE_X_SCROLL) << 3) | (self.x as u16)
     }
 
     pub fn get_scroll_y(&self) -> u16 {
-        (((self.v & COARSE_Y_SCROLL) >> 5) << 3) + ((self.v & FINE_Y_SCROLL) >> 12)
+        ((self.t & COARSE_Y_SCROLL) >> 2) | ((self.v & FINE_Y_SCROLL) >> 12)
     }
 
     pub fn get_nametable_select(&self) -> u16 {
-        (self.v & NAMETABLE_SELECT) >> 10
+        (self.t & NAMETABLE_SELECT) >> 10
     }
 
     pub fn dot_257(&mut self) {

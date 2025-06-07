@@ -49,6 +49,8 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
     let scroll_y = ppu.internal_regs.get_scroll_y() as usize;
     let base_nametable = VRAM_ADDR + ppu.internal_regs.get_nametable_select() * NAME_TABLE_SIZE;
 
+    println!("scroll x: {scroll_x}, scroll y: {scroll_y}");
+
     let (main_nt, right_nt, bottom_nt, bottom_right_nt) = get_nametables(ppu, base_nametable);
 
     // let (main_nametable, second_nametable) = match (&ppu.mirroring, base_nametable) {
@@ -105,7 +107,7 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
             frame,
             right_nt,
             Rect::new(0, 0, scroll_x, DISPLAY_HIGHT),
-            DISPLAY_WIDTH as isize - scroll_x as isize,
+            (DISPLAY_WIDTH - scroll_x) as isize,
             0,
         );
     }
@@ -116,19 +118,19 @@ fn draw_backgound(ppu: &Ppu, frame: &mut Frame) {
             bottom_nt,
             Rect::new(0, 0, DISPLAY_WIDTH, scroll_y),
             0,
-            DISPLAY_HIGHT as isize - scroll_y as isize,
+            (DISPLAY_HIGHT - scroll_y) as isize,
         );
     }
-    if (scroll_x > 0) && (scroll_y > 0) {
-        render_name_table(
-            ppu,
-            frame,
-            bottom_right_nt,
-            Rect::new(0, 0, scroll_x, scroll_y),
-            DISPLAY_WIDTH as isize - scroll_x as isize,
-            DISPLAY_HIGHT as isize - scroll_y as isize,
-        );
-    }
+    // if (scroll_x > 0) && (scroll_y > 0) {
+    //     render_name_table(
+    //         ppu,
+    //         frame,
+    //         bottom_right_nt,
+    //         Rect::new(0, 0, scroll_x, scroll_y),
+    //         (DISPLAY_WIDTH - scroll_x) as isize,
+    //         (DISPLAY_HIGHT - scroll_y) as isize,
+    //     );
+    // }
 }
 
 fn bg_pallete(
