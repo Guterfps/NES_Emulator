@@ -114,7 +114,7 @@ impl InternalRegs {
     }
 
     pub fn get_scroll_y(&self) -> u16 {
-        ((self.t & COARSE_Y_SCROLL) >> 2) | ((self.v & FINE_Y_SCROLL) >> 12)
+        ((self.t & COARSE_Y_SCROLL) >> 2) | ((self.t & FINE_Y_SCROLL) >> 12)
     }
 
     pub fn get_nametable_select(&self) -> u16 {

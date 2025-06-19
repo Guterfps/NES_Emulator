@@ -121,12 +121,12 @@ impl Ppu {
     }
 
     pub fn write_to_scroll(&mut self, value: u8) {
-        self.scroll_reg.write(value, self.internal_regs.get_w());
+        // self.scroll_reg.write(value, self.internal_regs.get_w());
         self.internal_regs.scroll_write(value);
     }
 
     pub fn write_to_ppu_addr(&mut self, value: u8) {
-        self.addr_reg.update(value, self.internal_regs.get_w());
+        // self.addr_reg.update(value, self.internal_regs.get_w());
         self.internal_regs.addr_write(value);
     }
 
@@ -328,9 +328,7 @@ impl Ppu {
         let y = self.oam_data[0] as usize;
         let x = self.oam_data[3] as usize;
 
-        (y.wrapping_add(1) == self.scanline as usize)
-            && ((cycle < x) || ((x + 8) <= cycle))
-            && (self.mask_reg.show_sprites() && self.mask_reg.show_background())
+        (y == self.scanline as usize) && (cycle >= x) && (self.mask_reg.show_sprites())
     }
 
     fn increment_vram_addr(&mut self) {
