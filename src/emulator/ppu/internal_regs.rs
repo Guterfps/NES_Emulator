@@ -66,8 +66,6 @@ impl InternalRegs {
         } else {
             AddressInc::GoingAcross as u16
         });
-
-        self.v &= 0x3FFF;
     }
 
     pub fn get_w(&self) -> bool {
@@ -131,6 +129,10 @@ impl InternalRegs {
 
     pub fn get_v(&self) -> u16 {
         self.v
+    }
+
+    pub fn get_x(&self) -> u8 {
+        self.x
     }
 
     fn togle_w(&mut self) {

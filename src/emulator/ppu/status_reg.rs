@@ -41,4 +41,8 @@ impl StatusReg {
     pub fn is_in_vblank(&self) -> bool {
         (self.flags & VBLANK_FLAG) != 0
     }
+
+    pub fn is_sprite_0_hit(&self) -> bool {
+        (self.flags & SPRITE_0_HIT_FLAG) != 0
+    }
 }

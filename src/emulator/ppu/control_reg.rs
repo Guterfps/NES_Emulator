@@ -71,4 +71,12 @@ impl ControlReg {
 
         NAME_TABLES_ADRESS + nametable_offset as u16 * NAME_TABLE_SIZE
     }
+
+    pub fn sprite_size(&self) -> u8 {
+        if (self.flags & SPRITE_SIZE_FLAG) != 0 {
+            16
+        } else {
+            8
+        }
+    }
 }
