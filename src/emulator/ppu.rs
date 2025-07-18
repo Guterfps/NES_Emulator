@@ -13,13 +13,13 @@ use address_reg::AddressReg;
 use control_reg::*;
 use internal_regs::*;
 use mask_reg::MaskReg;
-use render::frame::Frame;
+use render::{frame::Frame, pallete_table::SYSTEM_PALLETE};
 use scroll_reg::ScrollReg;
 use status_reg::{SPRITE_0_HIT_FLAG, StatusReg};
 
 pub struct Ppu {
     chr_rom: Vec<u8>,
-    screen: Frame,
+    pub screen: Frame,
     palette_table: [u8; PALETTE_TABLE_SIZE],
     vram: [u8; VRAM_SIZE],
     oam_data: [u8; OAM_DATA_SIZE],
@@ -68,6 +68,7 @@ const DOT_280_IN_SCANLINE: usize = 280;
 const DOT_304_IN_SCANLINE: usize = 304;
 const DOT_328_IN_SCANLINE: usize = 328;
 const PRE_RENDER_SCANLINE: u16 = 261;
+const VISIBLE_DOTS: u16 = 256;
 
 const FLIP_HORIZONTAL: u8 = 0b0100_0000;
 const FLIP_VERTICAL: u8 = 0b1000_0000;
@@ -226,9 +227,28 @@ impl Ppu {
                 if self.is_rendering() {
                     self.non_vblank_scanlines();
                 }
+                if (self.cycles > 0) && (self.cycles <= VISIBLE_DOTS as usize) {
+                    self.render_viseble_dots();
+                }
 
                 if (self.cycles <= 256) && self.is_sprite_0_hit(self.cycles) {
                     self.status_reg.set_sprite_zero_hit();
+                }
+
+                if (self.cycles == 340) && self.is_rendering() {
+                    self.oam_cache.fill(0);
+                    self.oam_cache_len = 0;
+                    let range = self.ctrl_reg.sprite_size();
+                    for i in (self.oam_addr_reg / 4)..64 {
+                        let diff = self.scanline as i16 - self.oam_data[i as usize * 4] as i16;
+                        if (diff >= 0) && ((diff as u8) < range) {
+                            self.oam_cache[self.oam_cache_len as usize] = i * 4;
+                            self.oam_cache_len += 1;
+                            if self.oam_cache_len >= 8 {
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             240 => {}
@@ -270,6 +290,8 @@ impl Ppu {
             self.cycles = 0;
             self.scanline += 1;
         }
+
+        // println!("scanline: {}, dot: {}", self.scanline, self.cycles);
     }
 
     fn non_vblank_scanlines(&mut self) {
@@ -326,37 +348,68 @@ impl Ppu {
         self.nmi_interrupt.is_some()
     }
 
+    fn render_viseble_dots(&mut self) {
+        let x = (self.cycles - 1) as u8;
+        // let fine_x = (self.internal_regs.get_x() + x) & (8 - 1);
+        let mut palette_addr: u8 = 0;
+        let mut palette_addr_sp: u8 = 0;
+        let mut back_priority: u8 = 0;
+
+        if self.mask_reg.show_background() {
+            palette_addr = self.render_background() as u8;
+            // if fine_x == 7 {
+            //     self.internal_regs.coarse_x_inc();
+            // }
+        }
+        if self.mask_reg.show_sprites() && (self.mask_reg.show_sprite_8() || (x >= 8)) {
+            palette_addr_sp = self.render_sprites(palette_addr as u16, &mut back_priority) as u8;
+        }
+        if ((palette_addr == 0) && (palette_addr_sp != 0))
+            || ((palette_addr != 0) && (palette_addr_sp != 0) && (back_priority == 0))
+        {
+            palette_addr = palette_addr_sp;
+        }
+
+        let palette = self.palette_table[palette_addr as usize];
+        self.screen.set_pixel(
+            x as usize,
+            self.scanline as usize,
+            SYSTEM_PALLETE[palette as usize],
+        );
+    }
+
     fn render_background(&mut self) -> u16 {
         let x = (self.cycles - 1) as u16;
         let fine_x = (self.internal_regs.get_x() as u16 + x) & (8 - 1);
         let v = self.internal_regs.get_v();
         let mut res = 0;
 
-        let tile_addr = self.internal_regs.fetch_tile_addr();
-        let attr_addr = self.internal_regs.fetch_attr_addr();
+        if (self.mask_reg.show_background_8()) || (x >= 8) {
+            let tile_addr = self.internal_regs.fetch_tile_addr();
+            let attr_addr = self.internal_regs.fetch_attr_addr();
 
-        let pattern_addr = (self.read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
-            | self.ctrl_reg.bknd_pattern_addr();
+            let pattern_addr = (self.read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
+                | self.ctrl_reg.bknd_pattern_addr();
 
-        let mut palette_addr = (self.read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
-        palette_addr |= ((self.read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
+            let mut palette_addr = (self.read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
+            palette_addr |= ((self.read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
 
-        if palette_addr != 0 {
-            let attr = self.read_vram(attr_addr);
-            res = palette_addr as u16 | (((attr as u16 >> ((v >> 4) & 4 | v & 2)) & 0x3) << 2);
+            if palette_addr != 0 {
+                let attr = self.read_vram(attr_addr);
+                res = palette_addr as u16 | (((attr as u16 >> ((v >> 4) & 4 | v & 2)) & 0x3) << 2);
+            }
         }
-
         res
     }
 
-    fn render_sprites(&mut self, bg_addr: u16) -> u16 {
+    fn render_sprites(&mut self, bg_addr: u16, back_priority: &mut u8) -> u16 {
         let x = self.cycles as u16 - 1;
         let y = self.scanline;
         let mut palette_addr = 0;
         let len = self.ctrl_reg.sprite_size();
         let mut j = 0;
 
-        while palette_addr == 0 {
+        while (palette_addr == 0) && (j < self.oam_cache_len) {
             let i = self.oam_cache[j as usize] as usize;
             let tile_x = self.oam_data[i + 3] as u16;
 
@@ -389,6 +442,7 @@ impl Ppu {
 
                 if palette_addr != 0 {
                     palette_addr |= 0x10 | ((attr as u16 & 0x3) << 2);
+                    *back_priority = attr & (1 << 5);
 
                     if !(self.status_reg.is_sprite_0_hit())
                         && (self.mask_reg.show_background())
@@ -400,9 +454,8 @@ impl Ppu {
                         self.status_reg.set_sprite_zero_hit();
                     }
                 }
-
-                j += 1;
             }
+            j += 1;
         }
 
         palette_addr

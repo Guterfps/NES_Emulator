@@ -125,7 +125,7 @@ fn game_test() {
     let program = std::fs::read("roms/games/super_mario.nes").unwrap();
     let rom = Rom::new(&program).unwrap();
 
-    let mut frame = Frame::new();
+    // let mut frame = Frame::new();
 
     let mut key_map = HashMap::new();
     key_map.insert(Keycode::Down, joypad::Buttons::Down);
@@ -141,8 +141,8 @@ fn game_test() {
     const FRAME_RATE: f32 = 1.0 / 60.0;
 
     let bus = Bus::new(rom, move |ppu: &Ppu, joypad: &mut JoyPad| {
-        render::render(ppu, &mut frame);
-        texture.update(None, &frame.data, 256 * 3).unwrap();
+        // render::render(ppu, &mut frame);
+        texture.update(None, &ppu.screen.data, 256 * 3).unwrap();
 
         canvas.copy(&texture, None, None).unwrap();
         canvas.present();

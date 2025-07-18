@@ -31,4 +31,12 @@ impl MaskReg {
     pub fn show_background(&self) -> bool {
         (self.flags & ENABLE_BACKGROUND_RENDERING_FLAG) != 0
     }
+
+    pub fn show_sprite_8(&self) -> bool {
+        (self.flags & SHOW_SPRITES_IN_LEFT_8_PIXELS_FLAG) != 0
+    }
+
+    pub fn show_background_8(&self) -> bool {
+        (self.flags & SHOW_BACKGROUND_IN_LEFT_8_PIXELS_FLAG) != 0
+    }
 }
