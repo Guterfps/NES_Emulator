@@ -184,12 +184,12 @@ impl Ppu {
         match mask_addr {
             ROM_ADDR..VRAM_ADDR => {
                 let res = self.internal_data_buf;
-                self.internal_data_buf = self.chr_rom[addr as usize];
+                self.internal_data_buf = self.chr_rom[mask_addr as usize];
                 res
             }
             VRAM_ADDR..VRAM_END_ADDR => {
                 let res = self.internal_data_buf;
-                self.internal_data_buf = self.vram[self.mirror_vram_addr(addr) as usize];
+                self.internal_data_buf = self.vram[self.mirror_vram_addr(mask_addr) as usize];
                 res
             }
             VRAM_END_ADDR..PALETTES_ADDR => {
@@ -241,7 +241,7 @@ impl Ppu {
                     let range = self.ctrl_reg.sprite_size();
                     for i in (self.oam_addr_reg / 4)..64 {
                         let diff = self.scanline as i16 - self.oam_data[i as usize * 4] as i16;
-                        if (diff >= 0) && ((diff as u8) < range) {
+                        if (diff >= 0) && (diff < range as i16) {
                             self.oam_cache[self.oam_cache_len as usize] = i * 4;
                             self.oam_cache_len += 1;
                             if self.oam_cache_len >= 8 {
@@ -413,28 +413,28 @@ impl Ppu {
             let i = self.oam_cache[j as usize] as usize;
             let tile_x = self.oam_data[i + 3] as u16;
 
-            if (x > tile_x) && ((x - tile_x) < 8) {
+            if !((x < tile_x) || ((x - tile_x) >= 8)) {
                 let tile = self.oam_data[i + 1] as u16;
                 let tile_y = self.oam_data[i] as u16 + 1;
                 let attr = self.oam_data[i + 2];
-                let mut x_off = (x - tile_x) & (8 - 1);
-                let mut y_off = (y - tile_y) & (len as u16 - 1);
+                let mut x_off = (x as i32 - tile_x as i32) & (8 - 1);
+                let mut y_off = (y as i32 - tile_y as i32) & (len as u16 - 1) as i32;
 
                 if (attr & FLIP_HORIZONTAL) == 0 {
                     x_off ^= 7;
                 }
-                if (attr & FLIP_VERTICAL) == 0 {
-                    y_off ^= len as u16 - 1;
+                if (attr & FLIP_VERTICAL) != 0 {
+                    y_off ^= len as i32 - 1;
                 }
 
                 let mut tile_addr;
 
                 if self.ctrl_reg.sprite_size() == 16 {
                     y_off = (y_off & 7) | ((y_off & 8) << 1);
-                    tile_addr = (tile >> 1) * 32 + y_off;
+                    tile_addr = (tile >> 1) * 32 + y_off as u16;
                     tile_addr |= (tile & 1) << 12;
                 } else {
-                    tile_addr = tile * 16 + y_off + (self.ctrl_reg.sprt_pattern_addr());
+                    tile_addr = tile * 16 + y_off as u16 + (self.ctrl_reg.sprt_pattern_addr());
                 }
 
                 palette_addr = (self.read_vram(tile_addr) as u16 >> x_off) & 1;
