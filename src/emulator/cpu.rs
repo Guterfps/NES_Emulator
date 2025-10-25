@@ -846,7 +846,7 @@ impl<'a> CPU6502<'a> {
         (opcode.instraction)(self, &opcode.addr_mode);
 
         self.bus
-            .tick(opcode.cycles + self.page_crossed as u8 + self.branch_taken as u8);
+            .tick((opcode.cycles + self.page_crossed as u8 + self.branch_taken as u8) as u16);
 
         // match op_code {
         //     // load and store ops

@@ -59,10 +59,10 @@ impl<'a> Bus<'a> {
         }
     }
 
-    pub fn tick(&mut self, cycles: u8) {
+    pub fn tick(&mut self, cycles: u16) {
         self.cycles += cycles as usize;
 
-        for _ in 0..(cycles * PPU_CPU_CYCLES_RATIO) {
+        for _ in 0..(cycles * PPU_CPU_CYCLES_RATIO as u16) {
             let nmi_before = self.ppu.is_nmi_interrupt();
             self.ppu.tick();
             let nmi_after = self.ppu.is_nmi_interrupt();
@@ -141,6 +141,13 @@ impl MemAccess for Bus<'_> {
                 }
 
                 self.ppu.write_to_oam_dma(&buffer);
+
+                self.tick(1);
+                let mut dma_cycles = 512;
+                if (self.cycles & 1) == 1 {
+                    dma_cycles += 1;
+                }
+                self.tick(dma_cycles);
             }
             JOYPAD_ADDR => self.joy_pad.write(data),
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => {

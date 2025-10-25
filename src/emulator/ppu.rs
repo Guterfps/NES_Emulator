@@ -200,6 +200,20 @@ impl Ppu {
         }
     }
 
+    fn internal_read_vram(&self, addr: u16) -> u8 {
+        let mask_addr = addr & 0x3FFF;
+
+        match mask_addr {
+            ROM_ADDR..VRAM_ADDR => self.chr_rom[mask_addr as usize],
+            VRAM_ADDR..VRAM_END_ADDR => self.vram[self.mirror_vram_addr(mask_addr) as usize],
+            VRAM_END_ADDR..PALETTES_ADDR => {
+                panic!("addr space 0x3000..0x3f00 not expected to be used")
+            }
+            PALETTES_ADDR..MIRRORS_ADDR => self.palette_table[Self::get_palette_table_index(addr)],
+            _ => panic!("unexpected access to mirrored space {addr}"),
+        }
+    }
+
     fn handle_data_internal_regs(&mut self) {
         self.internal_regs.data_read_write(self.ctrl_reg.addr_inc());
     }
@@ -216,39 +230,25 @@ impl Ppu {
     }
 
     pub fn write_to_oam_dma(&mut self, data: &[u8; OAM_DATA_SIZE]) {
-        for val in data {
-            self.write_to_oam_data(*val);
-        }
+        self.oam_data.copy_from_slice(data);
     }
 
     pub fn tick(&mut self) {
         match self.scanline {
             0..=VISIBLE_SCANLINES => {
-                if self.is_rendering() {
-                    self.non_vblank_scanlines();
-                }
                 if (self.cycles > 0) && (self.cycles <= VISIBLE_DOTS as usize) {
                     self.render_viseble_dots();
                 }
-
-                if (self.cycles <= 256) && self.is_sprite_0_hit(self.cycles) {
-                    self.status_reg.set_sprite_zero_hit();
+                if self.is_rendering() {
+                    self.non_vblank_scanlines();
                 }
 
+                // if (self.cycles <= 256) && self.is_sprite_0_hit(self.cycles) {
+                //     self.status_reg.set_sprite_zero_hit();
+                // }
+
                 if (self.cycles == 340) && self.is_rendering() {
-                    self.oam_cache.fill(0);
-                    self.oam_cache_len = 0;
-                    let range = self.ctrl_reg.sprite_size();
-                    for i in (self.oam_addr_reg / 4)..64 {
-                        let diff = self.scanline as i16 - self.oam_data[i as usize * 4] as i16;
-                        if (diff >= 0) && (diff < range as i16) {
-                            self.oam_cache[self.oam_cache_len as usize] = i * 4;
-                            self.oam_cache_len += 1;
-                            if self.oam_cache_len >= 8 {
-                                break;
-                            }
-                        }
-                    }
+                    self.evaluate_sprites_for_scanline(self.scanline + 1);
                 }
             }
             240 => {}
@@ -276,10 +276,16 @@ impl Ppu {
                     self.status_reg.unset_sprite_zero_hit();
                     self.status_reg.reset_vblank();
                 }
+                if (self.cycles == 340) && self.is_rendering() {
+                    self.evaluate_sprites_for_scanline(0);
+                }
             }
             SCANLINES_PER_FRAME => {
                 self.scanline = 0;
-                self.cycles = if self.is_odd_frame { 0 } else { 1 };
+                self.cycles = 0;
+                if self.is_odd_frame && self.is_rendering() {
+                    self.cycles = 1;
+                }
                 self.is_odd_frame = !self.is_odd_frame;
             }
             _ => unreachable!(),
@@ -294,13 +300,33 @@ impl Ppu {
         // println!("scanline: {}, dot: {}", self.scanline, self.cycles);
     }
 
-    fn non_vblank_scanlines(&mut self) {
-        if (self.cycles != 0)
-            && ((self.cycles >= DOT_328_IN_SCANLINE) || (self.cycles <= DOT_256_IN_SCANLINE))
-            && ((self.cycles & (8 - 1)) == 0)
-        {
-            self.internal_regs.coarse_x_inc();
+    fn evaluate_sprites_for_scanline(&mut self, target_scanline: u16) {
+        self.oam_cache.fill(0);
+        self.oam_cache_len = 0;
+        let range = self.ctrl_reg.sprite_size();
+
+        for i in 0..64 {
+            let sprite_y = self.oam_data[i as usize * 4] as i16 + 1;
+            let diff = target_scanline as i16 - sprite_y;
+
+            if (diff >= 0) && (diff < range as i16) {
+                self.oam_cache[self.oam_cache_len as usize] = i * 4;
+                self.oam_cache_len += 1;
+                if self.oam_cache_len >= 8 {
+                    break;
+                }
+            }
         }
+    }
+
+    fn non_vblank_scanlines(&mut self) {
+        // if (self.cycles != 0)
+        //     && (self.cycles >= DOT_328_IN_SCANLINE)
+        //     && ((self.cycles & (8 - 1)) == 0)
+        // {
+        //     self.internal_regs.coarse_x_inc();
+        // }
+
         if self.cycles == DOT_256_IN_SCANLINE {
             self.internal_regs.coarse_y_inc();
         }
@@ -378,25 +404,86 @@ impl Ppu {
         );
     }
 
+    // fn render_background(&mut self) -> u16 {
+    //     let x = (self.cycles - 1) as u16;
+    //     let fine_x = (self.internal_regs.get_x() as u16 + x) & (8 - 1);
+    //     let v = self.internal_regs.get_v();
+    //     let mut res = 0;
+
+    //     if (self.mask_reg.show_background_8()) || (x >= 8) {
+    //         let tile_addr = self.internal_regs.fetch_tile_addr();
+    //         let attr_addr = self.internal_regs.fetch_attr_addr();
+
+    //         let pattern_addr = (self.internal_read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
+    //             | self.ctrl_reg.bknd_pattern_addr();
+
+    //         let mut palette_addr = (self.internal_read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
+    //         palette_addr |= ((self.internal_read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
+
+    //         if palette_addr != 0 {
+    //             let attr = self.internal_read_vram(attr_addr);
+    //             res = palette_addr as u16 | (((attr as u16 >> ((v >> 4) & 4 | v & 2)) & 0x3) << 2);
+    //         }
+    //     }
+    //     res
+    // }
+
     fn render_background(&mut self) -> u16 {
-        let x = (self.cycles - 1) as u16;
-        let fine_x = (self.internal_regs.get_x() as u16 + x) & (8 - 1);
-        let v = self.internal_regs.get_v();
+        let x = (self.cycles - 1) as u16; // Current pixel (0-255)
+        let v = self.internal_regs.get_v(); // Base VRAM address for the scanline
+        let fine_x_scroll = self.internal_regs.get_x() as u16; // 3-bit fine X scroll
         let mut res = 0;
 
         if (self.mask_reg.show_background_8()) || (x >= 8) {
-            let tile_addr = self.internal_regs.fetch_tile_addr();
-            let attr_addr = self.internal_regs.fetch_attr_addr();
+            // --- NEW PER-PIXEL LOGIC ---
 
-            let pattern_addr = (self.read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
+            // 1. Calculate the total horizontal pixel position on the 512-pixel-wide
+            //    virtual nametable.
+            let total_pixel_x = x + ((v & COARSE_X_SCROLL) * 8) + fine_x_scroll;
+
+            // 2. Get the fine_x (0-7) for *this specific pixel* from the total.
+            let fine_x = total_pixel_x & 7;
+
+            // 3. Get the coarse_x (0-31) for *this specific pixel*.
+            let coarse_x = (total_pixel_x >> 3) & 31;
+
+            // 4. Get the base horizontal nametable (bit 10 of v).
+            let base_nametable = v & 0x0400;
+
+            // 5. Check if we've crossed a nametable boundary (e.g., pixel 256).
+            let nametable_wrap = (total_pixel_x >> 8) & 1; // 1 if total_pixel_x >= 256
+
+            // 6. XOR the base nametable with the wrap bit to get the *correct* nametable.
+            let pixel_nametable = base_nametable ^ (nametable_wrap << 10);
+
+            // 7. Construct a temporary 'v' for *this pixel only*.
+            //    It uses the Y info from the original 'v' but the new
+            //    horizontal info we just calculated.
+            let pixel_v = (v & !(COARSE_X_SCROLL | 0x0400)) // Clear old horizontal bits
+                          | coarse_x                        // Add new coarse_x
+                          | pixel_nametable; // Add new nametable select
+
+            // --- END NEW LOGIC ---
+
+            // Now, the rest of the function uses our new 'pixel_v' and 'fine_x'
+
+            let tile_addr = VRAM_ADDR | (pixel_v & 0x0FFF);
+            let attr_addr =
+                0x23C0 | (pixel_v & 0x0C00) | ((pixel_v >> 4) & 0x38) | ((pixel_v >> 2) & 0x07);
+
+            // Fine Y scroll is constant for the whole line, so reading 'v' here is fine.
+            let pattern_addr = (self.internal_read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
                 | self.ctrl_reg.bknd_pattern_addr();
 
-            let mut palette_addr = (self.read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
-            palette_addr |= ((self.read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
+            // Use the 'fine_x' we calculated (not the old one)
+            let mut palette_addr = (self.internal_read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
+            palette_addr |= ((self.internal_read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
 
             if palette_addr != 0 {
-                let attr = self.read_vram(attr_addr);
-                res = palette_addr as u16 | (((attr as u16 >> ((v >> 4) & 4 | v & 2)) & 0x3) << 2);
+                let attr = self.internal_read_vram(attr_addr);
+                // Use 'pixel_v' for attribute quadrant calculation
+                res = palette_addr as u16
+                    | (((attr as u16 >> ((pixel_v >> 4) & 4 | pixel_v & 2)) & 0x3) << 2);
             }
         }
         res
@@ -437,8 +524,8 @@ impl Ppu {
                     tile_addr = tile * 16 + y_off as u16 + (self.ctrl_reg.sprt_pattern_addr());
                 }
 
-                palette_addr = (self.read_vram(tile_addr) as u16 >> x_off) & 1;
-                palette_addr |= ((self.read_vram(tile_addr + 8) as u16 >> x_off) & 1) << 1;
+                palette_addr = (self.internal_read_vram(tile_addr) as u16 >> x_off) & 1;
+                palette_addr |= ((self.internal_read_vram(tile_addr + 8) as u16 >> x_off) & 1) << 1;
 
                 if palette_addr != 0 {
                     palette_addr |= 0x10 | ((attr as u16 & 0x3) << 2);
