@@ -67,6 +67,7 @@ const DOT_257_IN_SCANLINE: usize = 257;
 const DOT_280_IN_SCANLINE: usize = 280;
 const DOT_304_IN_SCANLINE: usize = 304;
 const DOT_328_IN_SCANLINE: usize = 328;
+const DOT_340_IN_SCANLINE: usize = 340;
 const PRE_RENDER_SCANLINE: u16 = 261;
 const VISIBLE_DOTS: u16 = 256;
 
@@ -177,27 +178,9 @@ impl Ppu {
     }
 
     fn read_vram(&mut self, addr: u16) -> u8 {
-        let mask_addr = addr & 0x3FFF;
-        // let addr = self.addr_reg.get();
-        // self.increment_vram_addr();
-
-        match mask_addr {
-            ROM_ADDR..VRAM_ADDR => {
-                let res = self.internal_data_buf;
-                self.internal_data_buf = self.chr_rom[mask_addr as usize];
-                res
-            }
-            VRAM_ADDR..VRAM_END_ADDR => {
-                let res = self.internal_data_buf;
-                self.internal_data_buf = self.vram[self.mirror_vram_addr(mask_addr) as usize];
-                res
-            }
-            VRAM_END_ADDR..PALETTES_ADDR => {
-                panic!("addr space 0x3000..0x3f00 not expected to be used")
-            }
-            PALETTES_ADDR..MIRRORS_ADDR => self.palette_table[Self::get_palette_table_index(addr)],
-            _ => panic!("unexpected access to mirrored space {addr}"),
-        }
+        let res = self.internal_data_buf;
+        self.internal_data_buf = self.internal_read_vram(addr);
+        res
     }
 
     fn internal_read_vram(&self, addr: u16) -> u8 {
@@ -247,7 +230,7 @@ impl Ppu {
                 //     self.status_reg.set_sprite_zero_hit();
                 // }
 
-                if (self.cycles == 340) && self.is_rendering() {
+                if (self.cycles == DOT_340_IN_SCANLINE) && self.is_rendering() {
                     self.evaluate_sprites_for_scanline(self.scanline + 1);
                 }
             }
@@ -276,7 +259,7 @@ impl Ppu {
                     self.status_reg.unset_sprite_zero_hit();
                     self.status_reg.reset_vblank();
                 }
-                if (self.cycles == 340) && self.is_rendering() {
+                if (self.cycles == DOT_340_IN_SCANLINE) && self.is_rendering() {
                     self.evaluate_sprites_for_scanline(0);
                 }
             }
@@ -375,17 +358,17 @@ impl Ppu {
     }
 
     fn render_viseble_dots(&mut self) {
-        let x = (self.cycles - 1) as u8;
-        // let fine_x = (self.internal_regs.get_x() + x) & (8 - 1);
+        let x = (self.cycles - 1) as u16;
+        let fine_x = (self.internal_regs.get_x() as u16 + x) & (8 - 1);
         let mut palette_addr: u8 = 0;
         let mut palette_addr_sp: u8 = 0;
         let mut back_priority: u8 = 0;
 
         if self.mask_reg.show_background() {
             palette_addr = self.render_background() as u8;
-            // if fine_x == 7 {
-            //     self.internal_regs.coarse_x_inc();
-            // }
+            if fine_x == 7 {
+                self.internal_regs.coarse_x_inc();
+            }
         }
         if self.mask_reg.show_sprites() && (self.mask_reg.show_sprite_8() || (x >= 8)) {
             palette_addr_sp = self.render_sprites(palette_addr as u16, &mut back_priority) as u8;
@@ -404,90 +387,90 @@ impl Ppu {
         );
     }
 
-    // fn render_background(&mut self) -> u16 {
-    //     let x = (self.cycles - 1) as u16;
-    //     let fine_x = (self.internal_regs.get_x() as u16 + x) & (8 - 1);
-    //     let v = self.internal_regs.get_v();
-    //     let mut res = 0;
-
-    //     if (self.mask_reg.show_background_8()) || (x >= 8) {
-    //         let tile_addr = self.internal_regs.fetch_tile_addr();
-    //         let attr_addr = self.internal_regs.fetch_attr_addr();
-
-    //         let pattern_addr = (self.internal_read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
-    //             | self.ctrl_reg.bknd_pattern_addr();
-
-    //         let mut palette_addr = (self.internal_read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
-    //         palette_addr |= ((self.internal_read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
-
-    //         if palette_addr != 0 {
-    //             let attr = self.internal_read_vram(attr_addr);
-    //             res = palette_addr as u16 | (((attr as u16 >> ((v >> 4) & 4 | v & 2)) & 0x3) << 2);
-    //         }
-    //     }
-    //     res
-    // }
-
     fn render_background(&mut self) -> u16 {
-        let x = (self.cycles - 1) as u16; // Current pixel (0-255)
-        let v = self.internal_regs.get_v(); // Base VRAM address for the scanline
-        let fine_x_scroll = self.internal_regs.get_x() as u16; // 3-bit fine X scroll
+        let x = (self.cycles - 1) as u16;
+        let fine_x = (self.internal_regs.get_x() as u16 + x) & (8 - 1);
+        let v = self.internal_regs.get_v();
         let mut res = 0;
 
         if (self.mask_reg.show_background_8()) || (x >= 8) {
-            // --- NEW PER-PIXEL LOGIC ---
+            let tile_addr = self.internal_regs.fetch_tile_addr();
+            let attr_addr = self.internal_regs.fetch_attr_addr();
 
-            // 1. Calculate the total horizontal pixel position on the 512-pixel-wide
-            //    virtual nametable.
-            let total_pixel_x = x + ((v & COARSE_X_SCROLL) * 8) + fine_x_scroll;
-
-            // 2. Get the fine_x (0-7) for *this specific pixel* from the total.
-            let fine_x = total_pixel_x & 7;
-
-            // 3. Get the coarse_x (0-31) for *this specific pixel*.
-            let coarse_x = (total_pixel_x >> 3) & 31;
-
-            // 4. Get the base horizontal nametable (bit 10 of v).
-            let base_nametable = v & 0x0400;
-
-            // 5. Check if we've crossed a nametable boundary (e.g., pixel 256).
-            let nametable_wrap = (total_pixel_x >> 8) & 1; // 1 if total_pixel_x >= 256
-
-            // 6. XOR the base nametable with the wrap bit to get the *correct* nametable.
-            let pixel_nametable = base_nametable ^ (nametable_wrap << 10);
-
-            // 7. Construct a temporary 'v' for *this pixel only*.
-            //    It uses the Y info from the original 'v' but the new
-            //    horizontal info we just calculated.
-            let pixel_v = (v & !(COARSE_X_SCROLL | 0x0400)) // Clear old horizontal bits
-                          | coarse_x                        // Add new coarse_x
-                          | pixel_nametable; // Add new nametable select
-
-            // --- END NEW LOGIC ---
-
-            // Now, the rest of the function uses our new 'pixel_v' and 'fine_x'
-
-            let tile_addr = VRAM_ADDR | (pixel_v & 0x0FFF);
-            let attr_addr =
-                0x23C0 | (pixel_v & 0x0C00) | ((pixel_v >> 4) & 0x38) | ((pixel_v >> 2) & 0x07);
-
-            // Fine Y scroll is constant for the whole line, so reading 'v' here is fine.
             let pattern_addr = (self.internal_read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
                 | self.ctrl_reg.bknd_pattern_addr();
 
-            // Use the 'fine_x' we calculated (not the old one)
             let mut palette_addr = (self.internal_read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
             palette_addr |= ((self.internal_read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
 
             if palette_addr != 0 {
                 let attr = self.internal_read_vram(attr_addr);
-                // Use 'pixel_v' for attribute quadrant calculation
-                res = palette_addr as u16
-                    | (((attr as u16 >> ((pixel_v >> 4) & 4 | pixel_v & 2)) & 0x3) << 2);
+                res = palette_addr as u16 | (((attr as u16 >> ((v >> 4) & 4 | v & 2)) & 0x3) << 2);
             }
         }
         res
     }
+
+    // fn render_background(&mut self) -> u16 {
+    //     let x = (self.cycles - 1) as u16; // Current pixel (0-255)
+    //     let v = self.internal_regs.get_v(); // Base VRAM address for the scanline
+    //     let fine_x_scroll = self.internal_regs.get_x() as u16; // 3-bit fine X scroll
+    //     let mut res = 0;
+
+    //     if (self.mask_reg.show_background_8()) || (x >= 8) {
+    //         // --- NEW PER-PIXEL LOGIC ---
+
+    //         // 1. Calculate the total horizontal pixel position on the 512-pixel-wide
+    //         //    virtual nametable.
+    //         let total_pixel_x = x + ((v & COARSE_X_SCROLL) * 8) + fine_x_scroll;
+
+    //         // 2. Get the fine_x (0-7) for *this specific pixel* from the total.
+    //         let fine_x = total_pixel_x & 7;
+
+    //         // 3. Get the coarse_x (0-31) for *this specific pixel*.
+    //         let coarse_x = (total_pixel_x >> 3) & 31;
+
+    //         // 4. Get the base horizontal nametable (bit 10 of v).
+    //         let base_nametable = v & 0x0400;
+
+    //         // 5. Check if we've crossed a nametable boundary (e.g., pixel 256).
+    //         let nametable_wrap = (total_pixel_x >> 8) & 1; // 1 if total_pixel_x >= 256
+
+    //         // 6. XOR the base nametable with the wrap bit to get the *correct* nametable.
+    //         let pixel_nametable = base_nametable ^ (nametable_wrap << 10);
+
+    //         // 7. Construct a temporary 'v' for *this pixel only*.
+    //         //    It uses the Y info from the original 'v' but the new
+    //         //    horizontal info we just calculated.
+    //         let pixel_v = (v & !(COARSE_X_SCROLL | 0x0400)) // Clear old horizontal bits
+    //                       | coarse_x                        // Add new coarse_x
+    //                       | pixel_nametable; // Add new nametable select
+
+    //         // --- END NEW LOGIC ---
+
+    //         // Now, the rest of the function uses our new 'pixel_v' and 'fine_x'
+
+    //         let tile_addr = VRAM_ADDR | (pixel_v & 0x0FFF);
+    //         let attr_addr =
+    //             0x23C0 | (pixel_v & 0x0C00) | ((pixel_v >> 4) & 0x38) | ((pixel_v >> 2) & 0x07);
+
+    //         // Fine Y scroll is constant for the whole line, so reading 'v' here is fine.
+    //         let pattern_addr = (self.internal_read_vram(tile_addr) as u16 * 16 + ((v >> 12) & 0x7))
+    //             | self.ctrl_reg.bknd_pattern_addr();
+
+    //         // Use the 'fine_x' we calculated (not the old one)
+    //         let mut palette_addr = (self.internal_read_vram(pattern_addr) >> (7 ^ fine_x)) & 1;
+    //         palette_addr |= ((self.internal_read_vram(pattern_addr + 8) >> (7 ^ fine_x)) & 1) << 1;
+
+    //         if palette_addr != 0 {
+    //             let attr = self.internal_read_vram(attr_addr);
+    //             // Use 'pixel_v' for attribute quadrant calculation
+    //             res = palette_addr as u16
+    //                 | (((attr as u16 >> ((pixel_v >> 4) & 4 | pixel_v & 2)) & 0x3) << 2);
+    //         }
+    //     }
+    //     res
+    // }
 
     fn render_sprites(&mut self, bg_addr: u16, back_priority: &mut u8) -> u16 {
         let x = self.cycles as u16 - 1;
