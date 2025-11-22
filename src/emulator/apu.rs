@@ -18,3 +18,18 @@ pub struct Apu {
     status: Status,
     frame_counter: FrameCounter,
 }
+
+impl Apu {
+    pub fn new() -> Self {
+        Self {
+            pulses: [Pulse::new(), Pulse::new()],
+            triangle: Triangle::new(),
+            noise: Noise::new(),
+            dmc: Dmc::new(),
+            status: Status::new(),
+            frame_counter: FrameCounter::new(),
+        }
+    }
+
+    pub fn tick(&mut self) {}
+}

@@ -12,6 +12,12 @@ pub const TRIANGLE_MASK: u8 = 0b0000_0100;
 pub const PULSE_2_CHANNEL_MASK: u8 = 0b0000_0010;
 pub const PULSE_1_CHANNEL_MASK: u8 = 0b0000_0001;
 
+impl Status {
+    pub fn new() -> Self {
+        Self { data: 0 }
+    }
+}
+
 impl Reg for Status {
     fn data(&self) -> u8 {
         self.data

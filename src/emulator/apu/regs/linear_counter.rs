@@ -7,6 +7,12 @@ pub struct LinearCounter {
 pub const CONTROL_MASK: u8 = 0b1000_0000;
 pub const LOAD_MASK: u8 = 0b0111_1111;
 
+impl LinearCounter {
+    pub fn new() -> Self {
+        Self { data: 0 }
+    }
+}
+
 impl Reg for LinearCounter {
     fn data(&self) -> u8 {
         self.data

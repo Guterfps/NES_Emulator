@@ -9,6 +9,12 @@ pub const ENVELOPE_COUNTER_HALT_MASK: u8 = 0b0010_0000;
 pub const CONSTANST_VOLUME_MASK: u8 = 0b0001_0000;
 pub const VOLUME_MASK: u8 = 0b000_1111;
 
+impl Envelope {
+    pub fn new() -> Self {
+        Self { data: 0 }
+    }
+}
+
 impl Reg for Envelope {
     fn data(&self) -> u8 {
         self.data
