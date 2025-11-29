@@ -21,6 +21,8 @@ const ENVELOPE_DUTY_MASK_OFFSET: usize = 6;
 const DUTY_TABLE_SIZE: usize = 4;
 const SEQUENCE_SIZE: usize = 8;
 
+const WRITE_ALL_MASK: u8 = 0xFF;
+
 const DUTY_TABLE: [[u8; SEQUENCE_SIZE]; DUTY_TABLE_SIZE] = [
     [0, 1, 0, 0, 0, 0, 0, 0], // 12.5%
     [0, 1, 1, 0, 0, 0, 0, 0], // 25%
@@ -77,5 +79,46 @@ impl Pulse {
 
     pub fn length_counter_tick(&mut self) {
         self.length_counter.tick();
+    }
+
+    pub fn envelope_write_all(&mut self, val: u8) {
+        self.envelope.write(WRITE_ALL_MASK, val);
+    }
+
+    pub fn length_counter_halt(&mut self, halt: bool) {
+        self.length_counter.halt = halt;
+    }
+
+    pub fn sweep_write_all(&mut self, val: u8) {
+        self.sweep.write(WRITE_ALL_MASK, val);
+    }
+
+    pub fn timer_low_write_all(&mut self, val: u8) {
+        self.timer_low.write(WRITE_ALL_MASK, val);
+    }
+
+    pub fn length_counter_write_all(&mut self, val: u8) {
+        self.length_counter.write(WRITE_ALL_MASK, val);
+    }
+
+    pub fn reset_phase_envelope(&mut self) {
+        self.envelope.restart();
+        self.duty_sequence_index = 0;
+    }
+
+    pub fn get_length_counter(&self) -> u8 {
+        self.length_counter.counter
+    }
+
+    pub fn length_counter_enable(&mut self, enable: bool) {
+        self.length_counter.enabled = enable;
+    }
+
+    pub fn is_length_counter_enabled(&self) -> bool {
+        self.length_counter.enabled
+    }
+
+    pub fn length_counter_reset(&mut self) {
+        self.length_counter.counter = 0;
     }
 }

@@ -15,6 +15,8 @@ pub struct Triangle {
 const HIGH_TIMER_OFFSET: usize = 8;
 const SEQUENCE_TABLE_SIZE: usize = 32;
 
+const WRITE_ALL_MASK: u8 = 0xFF;
+
 #[rustfmt::skip]
 const TRIANGLE_SEQUENCE: [u8; SEQUENCE_TABLE_SIZE] = [
     15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
@@ -61,5 +63,37 @@ impl Triangle {
 
     pub fn length_counter_tick(&mut self) {
         self.length_counter.tick();
+    }
+
+    pub fn linear_counter_write_all(&mut self, val: u8) {
+        self.linear_counter_load.write(WRITE_ALL_MASK, val);
+    }
+
+    pub fn timer_low_write_all(&mut self, val: u8) {
+        self.timer_low.write(WRITE_ALL_MASK, val);
+    }
+
+    pub fn length_counter_write_all(&mut self, val: u8) {
+        self.length_counter.write(WRITE_ALL_MASK, val);
+    }
+
+    pub fn linear_counter_reload(&mut self) {
+        self.linear_counter_load.reload_flag = true;
+    }
+
+    pub fn get_length_counter(&self) -> u8 {
+        self.length_counter.counter
+    }
+
+    pub fn length_counter_enable(&mut self, enable: bool) {
+        self.length_counter.enabled = enable;
+    }
+
+    pub fn is_length_counter_enabled(&self) -> bool {
+        self.length_counter.enabled
+    }
+
+    pub fn length_counter_reset(&mut self) {
+        self.length_counter.counter = 0;
     }
 }

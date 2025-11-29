@@ -1,5 +1,6 @@
 use core::panic;
 
+use super::apu::Apu;
 use super::joypad::JoyPad;
 use super::memory::MemAccess;
 use super::ppu::Ppu;
@@ -9,6 +10,7 @@ pub struct Bus<'call> {
     cpu_vram: [u8; VRAM_SIZE],
     prg_rom: Vec<u8>,
     ppu: Ppu,
+    apu: Apu,
     joy_pad: JoyPad,
     cycles: usize,
     gameloop_callback: Box<dyn FnMut(&Ppu, &mut JoyPad) + 'call>,
@@ -37,6 +39,11 @@ const PPU_REG_MIRROR_ADDR_DOWN_MASK: u16 = 0b0010_0000_0000_0111;
 
 const PPU_OAM_DMA_REG: u16 = 0x4014;
 
+const APU_PULSES_START: u16 = 0x4000;
+const APU_DMC_END: u16 = 0x4013;
+const APU_STATUS: u16 = 0x4015;
+const APU_FRAME_COUNTER: u16 = 0x4017;
+
 const JOYPAD_ADDR: u16 = 0x4016;
 
 const PPU_CPU_CYCLES_RATIO: u8 = 3;
@@ -53,6 +60,7 @@ impl<'a> Bus<'a> {
             cpu_vram: [0; VRAM_SIZE],
             prg_rom: rom.take_prg_rom(),
             ppu: Ppu::new(rom.take_chr_rom(), rom.get_mirroring()),
+            apu: Apu::new(),
             joy_pad: JoyPad::new(),
             cycles: 0,
             gameloop_callback: Box::from(gameloop_cb),
@@ -60,7 +68,7 @@ impl<'a> Bus<'a> {
     }
 
     pub fn tick(&mut self, cycles: u16) {
-        self.cycles += cycles as usize;
+        self.cycles = self.cycles.wrapping_add(cycles as usize);
 
         for _ in 0..(cycles * PPU_CPU_CYCLES_RATIO as u16) {
             let nmi_before = self.ppu.is_nmi_interrupt();
@@ -71,6 +79,14 @@ impl<'a> Bus<'a> {
                 (self.gameloop_callback)(&self.ppu, &mut self.joy_pad);
             }
         }
+
+        for _ in 0..cycles {
+            self.apu.tick();
+        }
+    }
+
+    pub fn get_audio_sample(&self) -> f32 {
+        self.apu.get_audio_sample()
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<u8> {
@@ -105,10 +121,12 @@ impl MemAccess for Bus<'_> {
                 let mirror_down_addr = addr & PPU_REG_MIRROR_ADDR_DOWN_MASK;
                 self.mem_read(mirror_down_addr)
             }
+            APU_STATUS => self.apu.read_status(),
+
             JOYPAD_ADDR => self.joy_pad.read(),
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => self.read_prg_rom(addr),
             _ => {
-                println!("memory not supported yet at: {:x}", addr);
+                println!("memory read not supported yet at: {:x}", addr);
                 0
             }
         }
@@ -149,12 +167,15 @@ impl MemAccess for Bus<'_> {
                 }
                 self.tick(dma_cycles);
             }
+            APU_PULSES_START..=APU_DMC_END | APU_STATUS | APU_FRAME_COUNTER => {
+                self.apu.write_register(addr, data)
+            }
             JOYPAD_ADDR => self.joy_pad.write(data),
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => {
                 panic!("Attempt to write to Cartridge ROM at: {:x}", addr);
             }
             _ => {
-                println!("memory not supported yet at: {:x}", addr);
+                println!("memory write not supported yet at: {:x}", addr);
             }
         }
     }

@@ -5,6 +5,8 @@ use channels::dmc::Dmc;
 use channels::noise::Noise;
 use channels::pulse::Pulse;
 use channels::triangle::Triangle;
+use regs::Reg;
+use regs::envelope::ENVELOPE_COUNTER_HALT_MASK;
 use regs::frame_counter::*;
 use regs::status::*;
 
@@ -19,6 +21,10 @@ pub struct Apu {
     frame_counter: FrameCounter,
     global_cycle: usize,
 }
+
+const PULSES_ADDR_MASK: u16 = 0b111;
+const NUM_OF_PULSE_REGS: u16 = 4;
+const REG_WRITE_ALL_MASK: u8 = 0xFF;
 
 impl Apu {
     pub fn new() -> Self {
@@ -76,7 +82,95 @@ impl Apu {
         // self.pulses[1].sweep.tick();
     }
 
-    // pub fn get_audio_sample
+    pub fn get_audio_sample(&self) -> f32 {
+        let p1 = self.pulses[0].output();
+        let p2 = self.pulses[1].output();
+        let tri = self.triangle.output();
 
-    // pub fn write_register(&mut self, addr: u16, data: u8)
+        // Siplefied Mixer formula (Approximation)
+        let pulse_out = 0.00752 * (p1 + p2) as f32;
+        let tri_out = 0.00851 * tri as f32 * 3.0;
+
+        pulse_out + tri_out
+    }
+
+    pub fn write_register(&mut self, addr: u16, data: u8) {
+        match addr {
+            // pulses
+            0x4000..=0x4007 => self.write_pulses(addr, data),
+            // triangle
+            0x4008 => self.triangle.linear_counter_write_all(data),
+            0x400A => self.triangle.timer_low_write_all(data),
+            0x400B => {
+                self.triangle.length_counter_write_all(data);
+                self.triangle.linear_counter_reload();
+            }
+            // status
+            0x4015 => {
+                self.status.write(REG_WRITE_ALL_MASK, data);
+                self.pulses[0].length_counter_enable((data & PULSE_1_CHANNEL_MASK) != 0);
+                self.pulses[1].length_counter_enable((data & PULSE_2_CHANNEL_MASK) != 0);
+                self.triangle
+                    .length_counter_enable((data & TRIANGLE_MASK) != 0);
+                // noise ...
+
+                if !self.pulses[0].is_length_counter_enabled() {
+                    self.pulses[0].length_counter_reset();
+                }
+                if !self.pulses[1].is_length_counter_enabled() {
+                    self.pulses[1].length_counter_reset();
+                }
+                if !self.triangle.is_length_counter_enabled() {
+                    self.triangle.length_counter_reset();
+                }
+            }
+            // frame counter
+            0x4017 => self.frame_counter.write(REG_WRITE_ALL_MASK, data),
+
+            _ => println!("Not a valid APU write address! ({:x})", addr),
+        }
+    }
+
+    pub fn read_status(&mut self) -> u8 {
+        let mut status = 0;
+
+        if self.pulses[0].get_length_counter() > 0 {
+            status |= PULSE_1_CHANNEL_MASK;
+        }
+        if self.pulses[1].get_length_counter() > 0 {
+            status |= PULSE_2_CHANNEL_MASK;
+        }
+        if self.triangle.get_length_counter() > 0 {
+            status |= TRIANGLE_MASK;
+        }
+        // if self.noise.get_length_counter() > 0 { status |= NOISE_MASK; }
+        // self.dmc.active { status |= DMC_MASK; }
+
+        // TODO: handle Frame Interrupt logic
+
+        status
+    }
+
+    fn write_pulses(&mut self, addr: u16, data: u8) {
+        let mask_addr = addr & PULSES_ADDR_MASK;
+        let iner_reg_addr = mask_addr % NUM_OF_PULSE_REGS;
+        let pulse_index = mask_addr / NUM_OF_PULSE_REGS;
+
+        match iner_reg_addr {
+            0 => {
+                self.pulses[pulse_index as usize].envelope_write_all(data);
+                self.pulses[pulse_index as usize]
+                    .length_counter_halt((data & ENVELOPE_COUNTER_HALT_MASK) != 0);
+            }
+            1 => self.pulses[pulse_index as usize].sweep_write_all(data),
+            2 => self.pulses[pulse_index as usize].timer_low_write_all(data),
+            3 => {
+                self.pulses[pulse_index as usize].length_counter_write_all(data);
+                self.pulses[pulse_index as usize].reset_phase_envelope();
+            }
+            _ => {
+                panic!("Not a valid pulse register address! ({:x})", addr)
+            }
+        }
+    }
 }
