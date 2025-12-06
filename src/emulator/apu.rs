@@ -8,6 +8,7 @@ use channels::triangle::Triangle;
 use regs::Reg;
 use regs::envelope::ENVELOPE_COUNTER_HALT_MASK;
 use regs::frame_counter::*;
+use regs::load_counter::LOAD_COUNTER_MASK;
 use regs::status::*;
 
 const NUM_OF_PULSE_CHANNELS: usize = 2;
@@ -54,8 +55,8 @@ impl Apu {
             for pulse in self.pulses.iter_mut() {
                 pulse.step_timer();
             }
-            // self.noise.step_timer();
-            // self.dmc.step_timer();
+            self.noise.step_timer();
+            self.dmc.step_timer();
         }
 
         self.global_cycle += 1;
@@ -66,7 +67,7 @@ impl Apu {
             pulse.envelope_tick();
         }
         self.triangle.linear_counter_tick();
-        // self.noise.envelope_tick();
+        self.noise.envelope.tick();
     }
 
     fn step_half_frame(&mut self) {
@@ -76,7 +77,7 @@ impl Apu {
             pulse.length_counter_tick();
         }
         self.triangle.length_counter_tick();
-        // self.noise.length_counter_tick();
+        self.noise.length_counter.tick();
 
         // self.pulses[0].sweep.tick(); // TODO: Implement Sweep logic later
         // self.pulses[1].sweep.tick();
@@ -86,12 +87,14 @@ impl Apu {
         let p1 = self.pulses[0].output();
         let p2 = self.pulses[1].output();
         let tri = self.triangle.output();
+        let noise = self.noise.output();
+        let dmc = self.dmc.output();
 
         // Siplefied Mixer formula (Approximation)
         let pulse_out = 0.00752 * (p1 + p2) as f32;
-        let tri_out = 0.00851 * tri as f32 * 3.0;
+        let tnd_out = (0.00851 * tri as f32) + (0.00494 * noise as f32) + (0.00335 * dmc as f32);
 
-        pulse_out + tri_out
+        pulse_out + tnd_out
     }
 
     pub fn write_register(&mut self, addr: u16, data: u8) {
@@ -105,6 +108,21 @@ impl Apu {
                 self.triangle.length_counter_write_all(data);
                 self.triangle.linear_counter_reload();
             }
+            // Noise
+            0x400C => {
+                self.noise.envelope.write(REG_WRITE_ALL_MASK, data);
+                self.noise.length_counter.halt = (data & ENVELOPE_COUNTER_HALT_MASK) != 0;
+            }
+            0x400E => self.noise.linear_feedback.write(REG_WRITE_ALL_MASK, data),
+            0x400F => {
+                self.noise.length_counter.write(REG_WRITE_ALL_MASK, data);
+                self.noise.envelope.restart();
+            }
+            // DMC
+            0x4010 => self.dmc.freq.write(REG_WRITE_ALL_MASK, data),
+            0x4011 => self.dmc.direct_load.write(LOAD_COUNTER_MASK, data),
+            0x4012 => self.dmc.write_sample_addr(data),
+            0x4013 => self.dmc.write_sample_len(data),
             // status
             0x4015 => {
                 self.status.write(REG_WRITE_ALL_MASK, data);
@@ -112,7 +130,6 @@ impl Apu {
                 self.pulses[1].length_counter_enable((data & PULSE_2_CHANNEL_MASK) != 0);
                 self.triangle
                     .length_counter_enable((data & TRIANGLE_MASK) != 0);
-                // noise ...
 
                 if !self.pulses[0].is_length_counter_enabled() {
                     self.pulses[0].length_counter_reset();
@@ -123,6 +140,13 @@ impl Apu {
                 if !self.triangle.is_length_counter_enabled() {
                     self.triangle.length_counter_reset();
                 }
+
+                self.noise.length_counter.enabled = (data & NOISE_MASK) != 0;
+                if !self.noise.length_counter.enabled {
+                    self.noise.length_counter.counter = 0;
+                }
+
+                self.dmc.enable((data & ENABLE_DMC_MASK) != 0);
             }
             // frame counter
             0x4017 => self.frame_counter.write(REG_WRITE_ALL_MASK, data),
@@ -143,8 +167,12 @@ impl Apu {
         if self.triangle.get_length_counter() > 0 {
             status |= TRIANGLE_MASK;
         }
-        // if self.noise.get_length_counter() > 0 { status |= NOISE_MASK; }
-        // self.dmc.active { status |= DMC_MASK; }
+        if self.noise.length_counter.counter > 0 {
+            status |= NOISE_MASK;
+        }
+        if self.dmc.remaining_bytes() > 0 {
+            status |= ENABLE_DMC_MASK;
+        }
 
         // TODO: handle Frame Interrupt logic
 
@@ -172,5 +200,17 @@ impl Apu {
                 panic!("Not a valid pulse register address! ({:x})", addr)
             }
         }
+    }
+
+    pub fn needs_dmc_sample(&self) -> bool {
+        self.dmc.needs_sample()
+    }
+
+    pub fn get_dmc_addr(&self) -> u16 {
+        self.dmc.get_current_addr()
+    }
+
+    pub fn set_dmc_sample(&mut self, val: u8) {
+        self.dmc.set_sample_buffer(val);
     }
 }

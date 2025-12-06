@@ -14,6 +14,9 @@ pub struct Bus<'call> {
     joy_pad: JoyPad,
     cycles: usize,
     gameloop_callback: Box<dyn FnMut(&Ppu, &mut JoyPad) + 'call>,
+
+    apu_sample_buffer: Vec<f32>,
+    apu_time_accumulator: f64,
 }
 
 const VRAM_SIZE: usize = 2048;
@@ -44,6 +47,9 @@ const APU_DMC_END: u16 = 0x4013;
 const APU_STATUS: u16 = 0x4015;
 const APU_FRAME_COUNTER: u16 = 0x4017;
 
+const APU_SAMPLES_BUFFER_SIZE: usize = 4096;
+const APU_CYCLES_PER_SAMPLE: f64 = 1789773.0 / 44100.0;
+
 const JOYPAD_ADDR: u16 = 0x4016;
 
 const PPU_CPU_CYCLES_RATIO: u8 = 3;
@@ -64,6 +70,8 @@ impl<'a> Bus<'a> {
             joy_pad: JoyPad::new(),
             cycles: 0,
             gameloop_callback: Box::from(gameloop_cb),
+            apu_sample_buffer: Vec::with_capacity(APU_SAMPLES_BUFFER_SIZE),
+            apu_time_accumulator: 0.0,
         }
     }
 
@@ -82,11 +90,21 @@ impl<'a> Bus<'a> {
 
         for _ in 0..cycles {
             self.apu.tick();
-        }
-    }
 
-    pub fn get_audio_sample(&self) -> f32 {
-        self.apu.get_audio_sample()
+            if self.apu.needs_dmc_sample() {
+                let addr = self.apu.get_dmc_addr();
+                let val = self.mem_read(addr);
+                self.apu.set_dmc_sample(val);
+            }
+        }
+
+        self.apu_time_accumulator += 1.0;
+        if self.apu_time_accumulator >= APU_CYCLES_PER_SAMPLE {
+            self.apu_time_accumulator -= APU_CYCLES_PER_SAMPLE;
+
+            let sample = self.apu.get_audio_sample();
+            self.apu_sample_buffer.push(sample);
+        }
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<u8> {
@@ -99,6 +117,21 @@ impl<'a> Bus<'a> {
             rom_addr &= PRG_ROM_PAGE_SIZE - 1;
         }
         self.prg_rom[rom_addr as usize]
+    }
+
+    pub fn get_audio_samples(&mut self) -> Vec<f32> {
+        std::mem::replace(
+            &mut self.apu_sample_buffer,
+            Vec::with_capacity(APU_SAMPLES_BUFFER_SIZE),
+        )
+    }
+
+    pub fn get_num_of_samples(&self) -> usize {
+        self.apu_sample_buffer.len()
+    }
+
+    pub fn get_cycles(&self) -> usize {
+        self.cycles
     }
 }
 

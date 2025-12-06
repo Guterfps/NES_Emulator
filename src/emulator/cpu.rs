@@ -128,6 +128,18 @@ impl<'a> CPU6502<'a> {
         self.bus.mem_read(addr)
     }
 
+    pub fn get_nof_samples(&self) -> usize {
+        self.bus.get_num_of_samples()
+    }
+
+    pub fn get_apu_samples(&mut self) -> Vec<f32> {
+        self.bus.get_audio_samples()
+    }
+
+    pub fn get_cycles_count(&self) -> usize {
+        self.bus.get_cycles()
+    }
+
     fn interrupt_nmi(&mut self) {
         self.push_stack_u16(self.program_counter);
 

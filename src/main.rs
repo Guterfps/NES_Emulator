@@ -1,6 +1,7 @@
 mod emulator;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use emulator::bus::Bus;
@@ -15,6 +16,7 @@ use emulator::rom::Rom;
 
 use rand::Rng;
 use sdl3::EventPump;
+use sdl3::audio::{AudioCallback, AudioFormat, AudioSpec, AudioStream};
 use sdl3::event::Event;
 use sdl3::keyboard::Keycode;
 use sdl3::pixels::Color;
@@ -103,6 +105,32 @@ fn nes_test() {
     });
 }
 
+struct NesAudioCallback {
+    // This buffer is shared with the main thread
+    sound_buffer: Arc<Mutex<VecDeque<f32>>>,
+}
+
+impl AudioCallback<f32> for NesAudioCallback {
+    // New Signature: We get the stream and the amount of data requested (unused here)
+    fn callback(&mut self, stream: &mut AudioStream, _bytes_requested: i32) {
+        let mut buffer = self.sound_buffer.lock().unwrap();
+
+        // VecDeque is circular, so it returns two slices. We push both.
+        let (slice1, slice2) = buffer.as_slices();
+
+        if !slice1.is_empty() {
+            // Ignore errors for now (e.g. if stream is full)
+            let _ = stream.put_data_f32(slice1);
+        }
+        if !slice2.is_empty() {
+            let _ = stream.put_data_f32(slice2);
+        }
+
+        // Clear the buffer since we moved everything to SDL
+        buffer.clear();
+    }
+}
+
 fn game_test() {
     let sdl_context = sdl3::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -121,6 +149,28 @@ fn game_test() {
     let mut texture = creator
         .create_texture_target(pixel_format, 256, 240)
         .unwrap();
+
+    // Audio
+    let audio_subsystem = sdl_context.audio().unwrap();
+    let desired_spec = AudioSpec {
+        freq: Some(44100),
+        channels: Some(1),
+        format: Some(AudioFormat::F32LE),
+    };
+
+    let audio_buffer = Arc::new(Mutex::new(VecDeque::<f32>::new()));
+    let callback_buffer = audio_buffer.clone();
+
+    let nes_callback = NesAudioCallback {
+        sound_buffer: callback_buffer,
+    };
+
+    // 4. Open the stream using the struct (This fixes Error E0277)
+    let audio_device = audio_subsystem
+        .open_playback_stream(&desired_spec, nes_callback)
+        .expect("Failed to open audio stream");
+
+    audio_device.resume().unwrap();
 
     let program = std::fs::read("roms/games/super_mario.nes").unwrap();
     let rom = Rom::new(&program).unwrap();
@@ -175,7 +225,16 @@ fn game_test() {
 
     let mut cpu = CPU6502::new(bus);
     cpu.reset();
-    cpu.run();
+    cpu.run_with_callback(move |cpu| {
+        if cpu.get_nof_samples() >= 1024 {
+            let samples = cpu.get_apu_samples();
+            let mut buffer = audio_buffer.lock().unwrap();
+
+            if buffer.len() < 44100 {
+                buffer.extend(samples);
+            }
+        }
+    });
 }
 
 use emulator::ppu::render::pallete_table as palette;
