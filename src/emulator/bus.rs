@@ -96,14 +96,14 @@ impl<'a> Bus<'a> {
                 let val = self.mem_read(addr);
                 self.apu.set_dmc_sample(val);
             }
-        }
 
-        self.apu_time_accumulator += 1.0;
-        if self.apu_time_accumulator >= APU_CYCLES_PER_SAMPLE {
-            self.apu_time_accumulator -= APU_CYCLES_PER_SAMPLE;
+            self.apu_time_accumulator += 1.0;
+            while self.apu_time_accumulator >= APU_CYCLES_PER_SAMPLE {
+                self.apu_time_accumulator -= APU_CYCLES_PER_SAMPLE;
 
-            let sample = self.apu.get_audio_sample();
-            self.apu_sample_buffer.push(sample);
+                let sample = self.apu.get_audio_sample();
+                self.apu_sample_buffer.push(sample);
+            }
         }
     }
 

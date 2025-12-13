@@ -10,7 +10,8 @@ pub struct Pulse {
     timer_low: TimerLow,
     length_counter: LengthCounter,
 
-    current_timer: u16,
+    timer_period: u16,
+    timer_counter: u16,
     duty_sequence_index: u8,
 }
 
@@ -22,6 +23,8 @@ const DUTY_TABLE_SIZE: usize = 4;
 const SEQUENCE_SIZE: usize = 8;
 
 const WRITE_ALL_MASK: u8 = 0xFF;
+
+const TIMER_MASK: u16 = 0x7FF;
 
 const DUTY_TABLE: [[u8; SEQUENCE_SIZE]; DUTY_TABLE_SIZE] = [
     [0, 1, 0, 0, 0, 0, 0, 0], // 12.5%
@@ -37,23 +40,32 @@ impl Pulse {
             sweep: Sweep::new(),
             timer_low: TimerLow::new(),
             length_counter: LengthCounter::new(),
-            current_timer: 0,
+            timer_period: 0,
+            timer_counter: 0,
             duty_sequence_index: 0,
         }
     }
 
-    fn get_timer_period(&self) -> u16 {
+    fn update_timer_period(&mut self) {
         let low = self.timer_low.read(TIMER_LOW_MASK) as u16;
         let high = self.length_counter.read(TIMER_HIGH_MASK) as u16;
 
-        low | (high << HIGH_TIMER_OFFSET)
+        self.timer_period = low | (high << HIGH_TIMER_OFFSET)
+    }
+
+    pub fn get_timer_period(&self) -> u16 {
+        self.timer_period
+    }
+
+    pub fn set_timer_period(&mut self, period: u16) {
+        self.timer_period = period & TIMER_MASK;
     }
 
     pub fn step_timer(&mut self) {
-        if self.current_timer > 0 {
-            self.current_timer -= 1;
+        if self.timer_counter > 0 {
+            self.timer_counter -= 1;
         } else {
-            self.current_timer = self.get_timer_period();
+            self.timer_counter = self.timer_period;
             self.duty_sequence_index =
                 self.duty_sequence_index.wrapping_sub(1) & (SEQUENCE_SIZE - 1) as u8;
         }
@@ -61,7 +73,10 @@ impl Pulse {
 
     pub fn output(&self) -> u8 {
         let mut res = 0;
-        if self.length_counter.is_active() && (self.get_timer_period() >= SILENT_PERIOD) {
+        if self.length_counter.is_active()
+            && (self.timer_period >= SILENT_PERIOD)
+            && !self.sweep.is_muted()
+        {
             let duty_mode = self.envelope.read(DUTY_MASK) >> ENVELOPE_DUTY_MASK_OFFSET;
             let bit = DUTY_TABLE[duty_mode as usize][self.duty_sequence_index as usize];
 
@@ -81,6 +96,10 @@ impl Pulse {
         self.length_counter.tick();
     }
 
+    pub fn sweep_tick(&mut self, current_period: u16, is_pulse_1: bool) -> Option<u16> {
+        self.sweep.tick(current_period, is_pulse_1)
+    }
+
     pub fn envelope_write_all(&mut self, val: u8) {
         self.envelope.write(WRITE_ALL_MASK, val);
     }
@@ -95,10 +114,13 @@ impl Pulse {
 
     pub fn timer_low_write_all(&mut self, val: u8) {
         self.timer_low.write(WRITE_ALL_MASK, val);
+        self.update_timer_period();
     }
 
     pub fn length_counter_write_all(&mut self, val: u8) {
         self.length_counter.write(WRITE_ALL_MASK, val);
+        self.update_timer_period();
+        self.duty_sequence_index = 0;
     }
 
     pub fn reset_phase_envelope(&mut self) {

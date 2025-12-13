@@ -2,6 +2,7 @@ mod emulator;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use emulator::bus::Bus;

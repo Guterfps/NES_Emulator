@@ -79,8 +79,14 @@ impl Apu {
         self.triangle.length_counter_tick();
         self.noise.length_counter.tick();
 
-        // self.pulses[0].sweep.tick(); // TODO: Implement Sweep logic later
-        // self.pulses[1].sweep.tick();
+        for (i, pulse) in self.pulses.iter_mut().enumerate() {
+            let is_pulse_1 = i == 0;
+            let current_period = pulse.get_timer_period();
+
+            if let Some(new_period) = pulse.sweep_tick(current_period, is_pulse_1) {
+                pulse.set_timer_period(new_period);
+            }
+        }
     }
 
     pub fn get_audio_sample(&self) -> f32 {
