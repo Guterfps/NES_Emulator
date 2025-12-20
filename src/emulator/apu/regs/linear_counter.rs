@@ -30,7 +30,7 @@ impl LinearCounter {
         }
     }
 
-    fn update_internal_state(&mut self) {
+    pub fn set_reload(&mut self) {
         self.reload_flag = true;
     }
 }
@@ -46,6 +46,6 @@ impl Reg for LinearCounter {
 
     fn write(&mut self, mask: u8, val: u8) {
         self.data = (self.data & !mask) | (val & mask);
-        self.update_internal_state();
+        self.set_reload();
     }
 }

@@ -6,19 +6,25 @@ use super::load_counter::*;
 pub struct Dmc {
     pub freq: Frequency,
     pub direct_load: LoadCounter,
-    sample_addr: u8,
-    sample_len: u8,
+    value: u8,
+    enabled: bool,
+
+    sample_addr: u16,
+    sample_len: u16,
 
     current_addr: u16,
     bytes_remaining: u16,
     sample_buffer: Option<u8>,
 
-    current_timer: u16,
+    timer_period: u16,
+    timer_counter: u16,
+
     shift_reg: u8,
     bits_remaining: u8,
     silence_flag: bool,
 
     irq_active: bool,
+    loop_flag: bool,
 }
 
 const NUM_OF_RATES: usize = 16;
@@ -41,39 +47,44 @@ impl Dmc {
         Self {
             freq: Frequency::new(),
             direct_load: LoadCounter::new(),
-            sample_addr: 0,
-            sample_len: 0,
+            value: 0,
+            enabled: false,
+            sample_addr: START_ADDR,
+            sample_len: 1,
             current_addr: START_ADDR,
             bytes_remaining: 0,
             sample_buffer: None,
-            current_timer: 0,
+            timer_period: DMC_RATE_TABLE[0],
+            timer_counter: 0,
             shift_reg: 0,
             bits_remaining: 8,
             silence_flag: true,
             irq_active: false,
+            loop_flag: false,
         }
-    }
-
-    pub fn enable(&mut self, enabled: bool) {
-        if !enabled {
-            self.bytes_remaining = 0;
-        } else if self.bytes_remaining == 0 {
-            self.restart_sample();
-        }
-        self.clear_interrupt();
     }
 
     pub fn restart_sample(&mut self) {
-        self.current_addr = START_ADDR + ((self.sample_addr as u16) << SHIFT_MUL_64);
-        self.bytes_remaining = ((self.sample_len as u16) << SHIFT_MUL_16) + 1;
+        self.current_addr = self.sample_addr;
+        self.bytes_remaining = self.sample_len;
     }
 
     pub fn step_timer(&mut self) {
-        if self.current_timer > 0 {
-            self.current_timer -= 1;
+        if let Some(val) = self.freq.take_changed() {
+            self.irq_active = (val & IRQ_ENABLE_MASK) != 0;
+            self.loop_flag = (val & LOOP_MASK) != 0;
+            let index = (val & FREQUENCY) as usize;
+            self.timer_period = DMC_RATE_TABLE[index];
+        }
+
+        if let Some(val) = self.direct_load.take_changed() {
+            self.value = val & LOAD_COUNTER_MASK;
+        }
+
+        if self.timer_counter > 0 {
+            self.timer_counter -= 1;
         } else {
-            let index = self.freq.read(FREQUENCY) as usize;
-            self.current_timer = DMC_RATE_TABLE[index];
+            self.timer_counter = self.timer_period;
             self.step_output_unit();
         }
     }
@@ -81,29 +92,25 @@ impl Dmc {
     fn step_output_unit(&mut self) {
         if !self.silence_flag {
             let bit_0 = self.shift_reg & BIT_0_MASK;
-            let mut level = self.direct_load.read(LOAD_COUNTER_MASK);
 
             if bit_0 == 1 {
-                if level <= MAX_OUTPUT_LEVEL {
-                    level += 2;
+                if self.value <= MAX_OUTPUT_LEVEL {
+                    self.value += 2;
                 }
-            } else if level >= MIN_OUTPUT_LEVEL {
-                level -= 2;
+            } else if self.value >= MIN_OUTPUT_LEVEL {
+                self.value -= 2;
             }
-
-            self.direct_load.write(LOAD_COUNTER_MASK, level);
-            self.shift_reg >>= 1;
         }
 
+        self.shift_reg >>= 1;
         self.bits_remaining -= 1;
 
         if self.bits_remaining == 0 {
             self.bits_remaining = RESET_BITS_REMAINING;
 
-            if let Some(sample) = self.sample_buffer {
+            if let Some(sample) = self.sample_buffer.take() {
                 self.shift_reg = sample;
                 self.silence_flag = false;
-                self.sample_buffer = None;
             } else {
                 self.silence_flag = true;
             }
@@ -121,12 +128,15 @@ impl Dmc {
             self.current_addr = LOOP_CPU_SPACE;
         }
 
-        self.bytes_remaining -= 1;
+        if self.bytes_remaining > 0 {
+            self.bytes_remaining -= 1;
+        }
+
         if self.bytes_remaining == 0 {
-            if self.freq.read(LOOP_MASK) != 0 {
+            if self.loop_flag {
                 self.restart_sample();
-            } else if self.freq.read(IRQ_ENABLE_MASK) != 0 {
-                self.irq_active = true;
+            } else if self.irq_active {
+                // TODO
             }
         }
     }
@@ -136,15 +146,24 @@ impl Dmc {
     }
 
     pub fn output(&self) -> u8 {
-        self.direct_load.read(LOAD_COUNTER_MASK)
+        self.value
+    }
+
+    pub fn enable(&mut self, enable: bool) {
+        self.enabled = enable;
+        if !enable {
+            self.bytes_remaining = 0;
+        } else if self.bytes_remaining == 0 {
+            self.restart_sample();
+        }
     }
 
     pub fn write_sample_addr(&mut self, addr: u8) {
-        self.sample_addr = addr;
+        self.sample_addr = START_ADDR | ((addr as u16) << SHIFT_MUL_64);
     }
 
     pub fn write_sample_len(&mut self, len: u8) {
-        self.sample_len = len;
+        self.sample_len = ((len as u16) << SHIFT_MUL_16) + 1;
     }
 
     pub fn get_current_addr(&self) -> u16 {

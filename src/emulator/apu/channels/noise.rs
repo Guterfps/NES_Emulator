@@ -1,5 +1,3 @@
-use crate::emulator::apu::regs::Reg;
-
 use super::envelope::*;
 use super::length_counter::*;
 use super::linear_feedback::*;
@@ -9,7 +7,8 @@ pub struct Noise {
     pub linear_feedback: LinearFeedback,
     pub length_counter: LengthCounter,
 
-    current_timer: u16,
+    timer_counter: u16,
+    timer_period: u16,
     shift_register: u16,
 }
 
@@ -28,34 +27,39 @@ impl Noise {
             envelope: Envelope::new(),
             linear_feedback: LinearFeedback::new(),
             length_counter: LengthCounter::new(),
-            current_timer: 0,
+            timer_counter: 0,
+            timer_period: 0,
             shift_register: 1,
         }
     }
 
     pub fn step_timer(&mut self) {
-        if self.current_timer > 0 {
-            self.current_timer -= 1;
-        } else {
-            let index = self.linear_feedback.read(NOISE_PERIOD_MASK) as usize;
-            self.current_timer = NOISE_PERIOD_TABLE[index];
+        if let Some(_val) = self.linear_feedback.take_changed() {
+            let index = self.linear_feedback.get_period_index();
+            self.timer_period = NOISE_PERIOD_TABLE[index];
+        }
 
-            let mode = self.linear_feedback.read(NOISE_MODE_MASK) != 0;
+        if self.timer_counter > 0 {
+            self.timer_counter -= 1;
+        } else {
+            self.timer_counter = self.timer_period;
+
+            let mode = self.linear_feedback.get_mode();
             let tap_bit = if mode { 6 } else { 1 };
 
             let bit_0 = self.shift_register & BIT_0_MASK;
             let bit_tap = (self.shift_register >> tap_bit) & BIT_0_MASK;
-            let feadback = bit_0 ^ bit_tap;
+            let feedback = bit_0 ^ bit_tap;
 
             self.shift_register >>= 1;
-            self.shift_register |= feadback << BIT_14_OFFSET;
+            self.shift_register |= feedback << BIT_14_OFFSET;
         }
     }
 
     pub fn output(&self) -> u8 {
         let mut res = 0;
 
-        if self.length_counter.is_active() && ((self.shift_register & BIT_0_MASK) != 0) {
+        if self.length_counter.is_active() && ((self.shift_register & BIT_0_MASK) == 0) {
             res = self.envelope.output_volume();
         }
 

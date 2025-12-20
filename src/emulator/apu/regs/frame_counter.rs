@@ -4,6 +4,9 @@ pub struct FrameCounter {
     data: u8,
     cycle_count: usize,
     step_index: usize,
+    frame_irq_active: bool,
+    interrupt_inhbit: bool,
+    mode: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -17,6 +20,11 @@ pub const MODE_MASK: u8 = 0b1000_0000;
 pub const IRQ_FLAG_MASK: u8 = 0b0100_0000;
 
 const APU_STEP: usize = 7457; // NTSC roughly 7457 cycles
+const STEP_1: usize = APU_STEP;
+const STEP_2: usize = 2 * APU_STEP;
+const STEP_3: usize = 3 * APU_STEP;
+const STEP_4: usize = 4 * APU_STEP;
+const STEP_5: usize = 5 * APU_STEP;
 
 impl FrameCounter {
     pub fn new() -> Self {
@@ -24,6 +32,9 @@ impl FrameCounter {
             data: 0,
             cycle_count: 0,
             step_index: 0,
+            frame_irq_active: false,
+            interrupt_inhbit: false,
+            mode: false,
         }
     }
 

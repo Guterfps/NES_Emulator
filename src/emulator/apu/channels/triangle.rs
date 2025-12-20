@@ -8,10 +8,12 @@ pub struct Triangle {
     timer_low: TimerLow,
     length_counter: LengthCounter,
 
-    current_timer: u16,
+    timer_period: u16,
+    timer_counter: u16,
     sequence_index: u8,
 }
 
+const BIT_7_MASK: u8 = 0b1000_0000;
 const HIGH_TIMER_OFFSET: usize = 8;
 const SEQUENCE_TABLE_SIZE: usize = 32;
 
@@ -29,23 +31,24 @@ impl Triangle {
             linear_counter_load: LinearCounter::new(),
             timer_low: TimerLow::new(),
             length_counter: LengthCounter::new(),
-            current_timer: 0,
+            timer_period: 0,
+            timer_counter: 0,
             sequence_index: 0,
         }
     }
 
-    fn get_timer_period(&self) -> u16 {
+    fn update_timer_period(&mut self) {
         let low = self.timer_low.read(TIMER_LOW_MASK) as u16;
         let high = self.length_counter.read(TIMER_HIGH_MASK) as u16;
 
-        low | (high << HIGH_TIMER_OFFSET)
+        self.timer_period = low | (high << HIGH_TIMER_OFFSET);
     }
 
     pub fn step_timer(&mut self) {
-        if self.current_timer > 0 {
-            self.current_timer -= 1;
+        if self.timer_counter > 0 {
+            self.timer_counter -= 1;
         } else {
-            self.current_timer = self.get_timer_period();
+            self.timer_counter = self.timer_period;
 
             if self.length_counter.is_active() && (self.linear_counter_load.counter > 0) {
                 self.sequence_index = (self.sequence_index + 1) & (SEQUENCE_TABLE_SIZE - 1) as u8;
@@ -67,14 +70,18 @@ impl Triangle {
 
     pub fn linear_counter_write_all(&mut self, val: u8) {
         self.linear_counter_load.write(WRITE_ALL_MASK, val);
+        self.length_counter.halt = (val & BIT_7_MASK) != 0;
     }
 
     pub fn timer_low_write_all(&mut self, val: u8) {
         self.timer_low.write(WRITE_ALL_MASK, val);
+        self.update_timer_period();
     }
 
     pub fn length_counter_write_all(&mut self, val: u8) {
         self.length_counter.write(WRITE_ALL_MASK, val);
+        self.update_timer_period();
+        self.linear_counter_load.set_reload();
     }
 
     pub fn linear_counter_reload(&mut self) {
