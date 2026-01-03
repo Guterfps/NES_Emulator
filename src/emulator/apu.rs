@@ -155,7 +155,12 @@ impl Apu {
                 self.dmc.enable((data & ENABLE_DMC_MASK) != 0);
             }
             // frame counter
-            0x4017 => self.frame_counter.write(REG_WRITE_ALL_MASK, data),
+            0x4017 => {
+                self.frame_counter.write(REG_WRITE_ALL_MASK, data);
+                if (data & MODE_MASK) != 0 {
+                    self.step_half_frame();
+                }
+            }
 
             _ => println!("Not a valid APU write address! ({:x})", addr),
         }
