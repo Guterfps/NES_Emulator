@@ -94,6 +94,8 @@ impl<'a> CPU6502<'a> {
         while !break_status {
             if let Some(_nmi) = self.bus.poll_nmi_status() {
                 self.interrupt_nmi();
+            } else if self.bus.poll_irq_status() {
+                self.interrupt_irq();
             }
 
             callback(self);
@@ -141,6 +143,25 @@ impl<'a> CPU6502<'a> {
     }
 
     fn interrupt_nmi(&mut self) {
+        self.common_interrupt();
+
+        let handler_addr = self.bus.mem_read_u16(NON_MASKABLE_INTER_HNDLER_ADDR);
+        self.program_counter = handler_addr;
+        self.bus.tick(7);
+    }
+
+    fn interrupt_irq(&mut self) {
+        if self.status_reg.get_flag(INTERRUPT_DISABLE) == 0 {
+            self.common_interrupt();
+
+            let handler_addr = self.bus.mem_read_u16(BRK_INTR_HANDLER_ADDR);
+            self.program_counter = handler_addr;
+
+            self.bus.tick(7);
+        }
+    }
+
+    fn common_interrupt(&mut self) {
         self.push_stack_u16(self.program_counter);
 
         let mut stack_status = self.status_reg.clone();
@@ -149,10 +170,6 @@ impl<'a> CPU6502<'a> {
         self.push_stack(stack_status.status);
 
         self.status_reg.set_flag(INTERRUPT_DISABLE);
-
-        let handler_addr = self.bus.mem_read_u16(NON_MASKABLE_INTER_HNDLER_ADDR);
-        self.program_counter = handler_addr;
-        self.bus.tick(2);
     }
 
     // load and store ops

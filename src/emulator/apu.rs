@@ -180,7 +180,14 @@ impl Apu {
             status |= ENABLE_DMC_MASK;
         }
 
-        // TODO: handle Frame Interrupt logic
+        if self.frame_counter.is_irq_active() {
+            status |= IRQ_FLAG_MASK;
+            self.frame_counter.clear_irq();
+        }
+
+        if self.dmc.is_irq_active() {
+            status |= DMC_INTERRUPT_MASK;
+        }
 
         status
     }
@@ -218,5 +225,9 @@ impl Apu {
 
     pub fn set_dmc_sample(&mut self, val: u8) {
         self.dmc.set_sample_buffer(val);
+    }
+
+    pub fn get_irq(&self) -> bool {
+        self.frame_counter.is_irq_active() || self.dmc.is_irq_active()
     }
 }

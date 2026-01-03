@@ -173,4 +173,8 @@ impl Dmc {
     pub fn remaining_bytes(&self) -> u16 {
         self.bytes_remaining
     }
+
+    pub fn is_irq_active(&self) -> bool {
+        self.irq_active
+    }
 }

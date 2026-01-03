@@ -51,6 +51,7 @@ const APU_SAMPLES_BUFFER_SIZE: usize = 4096;
 const APU_CYCLES_PER_SAMPLE: f64 = 1789773.0 / 44100.0;
 
 const JOYPAD_ADDR: u16 = 0x4016;
+const JOYPAD_2_ADDR: u16 = 0x4017;
 
 const PPU_CPU_CYCLES_RATIO: u8 = 3;
 
@@ -133,6 +134,10 @@ impl<'a> Bus<'a> {
     pub fn get_cycles(&self) -> usize {
         self.cycles
     }
+
+    pub fn poll_irq_status(&self) -> bool {
+        self.apu.get_irq()
+    }
 }
 
 impl MemAccess for Bus<'_> {
@@ -157,6 +162,7 @@ impl MemAccess for Bus<'_> {
             APU_STATUS => self.apu.read_status(),
 
             JOYPAD_ADDR => self.joy_pad.read(),
+            JOYPAD_2_ADDR => 0, // TODO: implement second joystick
             PRG_ROM_START_ADDR..=PRG_ROM_END_ADDR => self.read_prg_rom(addr),
             _ => {
                 println!("memory read not supported yet at: {:x}", addr);
